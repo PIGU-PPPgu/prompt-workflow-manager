@@ -1,0 +1,209 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1762879976411,
+      "tag": "0000_flat_arclight",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1762880041013,
+      "tag": "0001_closed_penance",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1762882920978,
+      "tag": "0002_oval_warbound",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1762883904120,
+      "tag": "0003_complex_expediter",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1762919545941,
+      "tag": "0004_lean_oracle",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1762935122839,
+      "tag": "0005_complex_prodigy",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1762949067041,
+      "tag": "0006_broad_gladiator",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1762949222741,
+      "tag": "0007_cool_goblin_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1762951370203,
+      "tag": "0008_vengeful_hex",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1762951760047,
+      "tag": "0009_nervous_skrulls",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1762956120313,
+      "tag": "0010_wooden_susan_delgado",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1762957827052,
+      "tag": "0011_jittery_crystal",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1763049460966,
+      "tag": "0012_overrated_killraven",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1763082152876,
+      "tag": "0013_lame_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1763087507798,
+      "tag": "0014_nice_killer_shrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1763089755215,
+      "tag": "0015_shocking_colossus",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1763094740652,
+      "tag": "0016_icy_starhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1763095587536,
+      "tag": "0017_naive_starhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1763097552695,
+      "tag": "0018_stormy_famine",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1763098357803,
+      "tag": "0019_busy_ronan",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1763102343019,
+      "tag": "0020_greedy_serpent_society",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1763105753359,
+      "tag": "0021_chunky_captain_universe",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1766925013173,
+      "tag": "0022_gifted_fantastic_four",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1766987617731,
+      "tag": "0023_lame_randall",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1766996531037,
+      "tag": "0024_clammy_inertia",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1767106280702,
+      "tag": "0025_long_silver_samurai",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1767365917359,
+      "tag": "0026_dear_madripoor",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1767428957107,
+      "tag": "0027_shallow_baron_zemo",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1767504198727,
+      "tag": "0028_omniscient_pete_wisdom",
+      "breakpoints": true
+    }
+  ]
+}

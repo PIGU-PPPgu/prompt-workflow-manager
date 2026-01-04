@@ -1,0 +1,1 @@
+ALTER TABLE `agents` ADD `platform` varchar(50);

@@ -1,0 +1,108 @@
+# ============================================
+# TeachPT - Docker Compose 配置
+# 一键部署：docker-compose up -d
+# ============================================
+
+version: '3.8'
+
+services:
+  # ============================================
+  # MySQL 数据库
+  # ============================================
+  mysql:
+    image: mysql:8.0
+    container_name: teachpt-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-teachpt_root_2024}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-prompt_workflow_manager}
+      MYSQL_USER: ${MYSQL_USER:-teachpt}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-teachpt_pass_2024}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - teachpt-network
+
+  # ============================================
+  # TeachPT 应用
+  # ============================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: teachpt-app
+    restart: unless-stopped
+    ports:
+      - "1060:1060"
+    environment:
+      NODE_ENV: production
+      PORT: 1060
+      DATABASE_URL: mysql://${MYSQL_USER:-teachpt}:${MYSQL_PASSWORD:-teachpt_pass_2024}@mysql:3306/${MYSQL_DATABASE:-prompt_workflow_manager}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string-in-production}
+      COOKIE_NAME: ${COOKIE_NAME:-teachpt_session}
+      OWNER_EMAIL: ${OWNER_EMAIL:-}
+      OWNER_OPEN_ID: ${OWNER_OPEN_ID:-}
+      # Supabase Auth
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+      # Branding
+      VITE_APP_TITLE: ${VITE_APP_TITLE:-TeachPT}
+      APP_LOGO: ${APP_LOGO:-/teachpt-logo.png}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - teachpt-network
+
+  # ============================================
+  # (可选) Redis 缓存
+  # ============================================
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: teachpt-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - teachpt-network
+
+  # ============================================
+  # (可选) Nginx 反向代理
+  # ============================================
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: teachpt-nginx
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - app
+  #   networks:
+  #     - teachpt-network
+
+networks:
+  teachpt-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
+  # redis_data:
+  #   driver: local

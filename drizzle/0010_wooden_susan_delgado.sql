@@ -1,0 +1,1 @@
+ALTER TABLE `scenarios` ADD `icon` varchar(50);
