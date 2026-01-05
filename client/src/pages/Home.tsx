@@ -143,10 +143,10 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-4">
             <a href={getLoginUrl()} className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
-              Access Vault
+              访问系统
             </a>
             <Button asChild size="sm" className="bg-white text-black hover:bg-slate-200 font-medium">
-              <a href={getLoginUrl()}>Sign In</a>
+              <a href={getLoginUrl()}>登录</a>
             </Button>
           </div>
         </div>
@@ -157,23 +157,23 @@ export default function Home() {
         
         {/* Hero Header */}
         <div className="max-w-3xl mx-auto text-center mb-20">
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-4xl md:text-6xl font-bold tracking-tight text-white mb-6"
           >
-            Your Central Intelligence <br/>
+            您的 AI 教学<br/>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
-              Asset Repository
+              智能中心
             </span>
           </motion.h1>
-          <motion.p 
+          <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
             className="text-lg text-slate-400 max-w-2xl mx-auto"
           >
-            The unified operating system for your AI workflows. Store prompts, orchestrate agents, and deploy educational scenarios from a single, secure vault.
+            教学 AI 工作流的统一操作系统。存储指令、编排智能助手、部署教学场景，一站式管理您的教学资产。
           </motion.p>
         </div>
 
@@ -187,8 +187,8 @@ export default function Home() {
                 <BookOpen className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">Instruction Library</h3>
-                <p className="text-sm text-slate-500">Version controlled prompts</p>
+                <h3 className="text-lg font-semibold text-white">教学指令库</h3>
+                <p className="text-sm text-slate-500">版本化指令管理</p>
               </div>
             </div>
             <div className="flex-1 bg-slate-950/50 rounded-lg border border-slate-800 p-4 font-mono text-xs text-slate-300 relative overflow-hidden">
@@ -215,8 +215,8 @@ export default function Home() {
                 <Cpu className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">Neural Agents</h3>
-                <p className="text-sm text-slate-500">Autonomous tutors</p>
+                <h3 className="text-lg font-semibold text-white">智能助教</h3>
+                <p className="text-sm text-slate-500">自主学习辅导</p>
               </div>
             </div>
             <div className="flex-1 flex items-center justify-center relative">
@@ -229,12 +229,12 @@ export default function Home() {
             </div>
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-800/50 p-2 rounded">
-                <span>Math Tutor</span>
-                <span className="text-green-400">Online</span>
+                <span>数学助教</span>
+                <span className="text-green-400">在线</span>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-800/50 p-2 rounded">
-                <span>Essay Grader</span>
-                <span className="text-green-400">Active</span>
+                <span>作文批改</span>
+                <span className="text-green-400">运行中</span>
               </div>
             </div>
           </GlowingCard>
@@ -246,7 +246,7 @@ export default function Home() {
                 <Network className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">Logic Workflows</h3>
+                <h3 className="text-lg font-semibold text-white">逻辑工作流</h3>
               </div>
             </div>
             <div className="h-16 flex items-center gap-2 overflow-hidden opacity-70">
@@ -263,13 +263,13 @@ export default function Home() {
                 <LayoutTemplate className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">Scenarios</h3>
+                <h3 className="text-lg font-semibold text-white">教学场景</h3>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 mt-2">
-              <Badge variant="outline" className="border-pink-500/20 text-pink-300">Exam Gen</Badge>
-              <Badge variant="outline" className="border-pink-500/20 text-pink-300">Review</Badge>
-              <Badge variant="outline" className="border-pink-500/20 text-pink-300">Quiz</Badge>
+              <Badge variant="outline" className="border-pink-500/20 text-pink-300">试卷生成</Badge>
+              <Badge variant="outline" className="border-pink-500/20 text-pink-300">复习</Badge>
+              <Badge variant="outline" className="border-pink-500/20 text-pink-300">测验</Badge>
             </div>
           </GlowingCard>
 
@@ -279,11 +279,11 @@ export default function Home() {
         <div className="mt-20 text-center">
           <Button asChild size="lg" className="h-12 px-8 text-base bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-900/20 rounded-lg">
             <a href={getLoginUrl()}>
-              Initialize System <ArrowRight className="ml-2 w-4 h-4" />
+              开始使用 <ArrowRight className="ml-2 w-4 h-4" />
             </a>
           </Button>
           <p className="mt-4 text-xs text-slate-500 font-mono">
-            SECURE CONNECTION • ENCRYPTED STORAGE • V1.0.0
+            安全连接 • 加密存储 • V1.0.0
           </p>
         </div>
 
