@@ -5,7 +5,6 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
 import { startSubscriptionReminderJob } from "../jobs/subscriptionReminder";
 import { checkRateLimit } from "../utils/rateLimit";
 
@@ -74,8 +73,10 @@ async function startServer() {
   // ============ 静态文件服务 ============
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
   } else {
+    const { serveStatic } = await import("./vite.prod");
     serveStatic(app);
   }
 
