@@ -3,9 +3,11 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 
 export async function setupVite(app: Express, server: Server) {
+  // Dynamic import vite to avoid bundling in production
+  const { createServer: createViteServer } = await import("vite");
+
   const vite = await createViteServer({
     root: path.resolve(import.meta.dirname, "../..", "client"),
     configFile: false,
