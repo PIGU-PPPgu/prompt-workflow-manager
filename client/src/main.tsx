@@ -48,10 +48,14 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
+const apiBase =
+  (import.meta as any).env?.VITE_API_URL?.replace(/\/$/, "") ||
+  window.location.origin;
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
-      url: "/api/trpc",
+      url: `${apiBase}/api/trpc`,
       transformer: superjson,
       async fetch(input, init) {
         const { data } = await supabase.auth.getSession();
