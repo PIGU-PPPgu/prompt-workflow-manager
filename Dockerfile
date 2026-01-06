@@ -26,11 +26,11 @@ ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_APP_TITLE
 ARG VITE_APP_LOGO
 
-# Make build args available as environment variables during build
-ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-ENV VITE_APP_TITLE=${VITE_APP_TITLE}
-ENV VITE_APP_LOGO=${VITE_APP_LOGO}
+# Create .env.production file for Vite build (Vite doesn't allow NODE_ENV=production in .env)
+RUN echo "VITE_SUPABASE_URL=${VITE_SUPABASE_URL}" > .env.production && \
+    echo "VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}" >> .env.production && \
+    echo "VITE_APP_TITLE=${VITE_APP_TITLE}" >> .env.production && \
+    echo "VITE_APP_LOGO=${VITE_APP_LOGO}" >> .env.production
 
 # Build the application
 RUN pnpm run build
