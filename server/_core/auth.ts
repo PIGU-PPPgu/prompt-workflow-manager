@@ -51,38 +51,47 @@ async function verifyWithRemoteJwks(
 }
 
 async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPayload | null> {
-  // 1) 新版 Supabase: 使用 JWKS (ES/RS 签名)
-  const jwksPayload = await verifyWithRemoteJwks(token);
-  if (jwksPayload) return jwksPayload;
-
-  // 2) Supabase Cloud / 本地开发: 使用 HS256 Secret 验证
+  // 1) Supabase Cloud / 本地开发: 优先使用 HS256 Secret 验证
   if (ENV.supabaseJwtSecret) {
+    // 尝试方式1: 直接使用 UTF-8 编码的 secret（最常见情况）
     try {
-      // Supabase JWT secret 可能是 base64 编码的，尝试解码
-      let secretKey: Uint8Array;
-      try {
-        // 尝试 base64 解码
-        const decoded = Buffer.from(ENV.supabaseJwtSecret, 'base64');
-        // 验证是否是有效的 base64（解码后重新编码应该匹配）
-        if (decoded.toString('base64') === ENV.supabaseJwtSecret) {
-          secretKey = new Uint8Array(decoded);
-        } else {
-          secretKey = encoder.encode(ENV.supabaseJwtSecret);
-        }
-      } catch {
-        // 如果不是有效的 base64，直接使用 UTF-8 编码
-        secretKey = encoder.encode(ENV.supabaseJwtSecret);
-      }
-
+      const rawSecretKey = encoder.encode(ENV.supabaseJwtSecret);
       const { payload } = await jwtVerify(
         token,
-        secretKey,
+        rawSecretKey,
         { algorithms: ["HS256", "HS384", "HS512"] }
       );
+      console.log("[Auth] JWT verified with raw UTF-8 secret");
       return payload as SupabaseJwtPayload;
-    } catch (hs256Error) {
-      console.warn("[Auth] HS256 verification failed:", hs256Error);
+    } catch {
+      // UTF-8 验证失败，尝试下一种方式
     }
+
+    // 尝试方式2: base64 解码后的 secret
+    try {
+      const decoded = Buffer.from(ENV.supabaseJwtSecret, 'base64');
+      if (decoded.length > 0) {
+        const decodedSecretKey = new Uint8Array(decoded);
+        const { payload } = await jwtVerify(
+          token,
+          decodedSecretKey,
+          { algorithms: ["HS256", "HS384", "HS512"] }
+        );
+        console.log("[Auth] JWT verified with base64 decoded secret");
+        return payload as SupabaseJwtPayload;
+      }
+    } catch {
+      // base64 验证也失败
+    }
+
+    console.warn("[Auth] HS256 verification failed with both raw and base64 secret");
+  }
+
+  // 2) 自托管 Supabase: 使用 JWKS (ES/RS 签名)
+  const jwksPayload = await verifyWithRemoteJwks(token);
+  if (jwksPayload) {
+    console.log("[Auth] JWT verified with JWKS");
+    return jwksPayload;
   }
 
   console.warn("[Auth] Supabase JWT verification failed for all strategies");

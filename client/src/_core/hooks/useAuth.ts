@@ -48,9 +48,12 @@ export function useAuth(options?: UseAuthOptions) {
       "manus-runtime-user-info",
       JSON.stringify(meQuery.data)
     );
+    // 当正在刷新且没有用户数据时，也应该显示loading状态
+    // 这可以避免在invalidate后，使用旧的null缓存数据进行错误的重定向
+    const isRefreshingWithNoData = meQuery.isFetching && !meQuery.data;
     return {
       user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
+      loading: meQuery.isLoading || logoutMutation.isPending || isRefreshingWithNoData,
       error: meQuery.error ?? logoutMutation.error ?? null,
       isAuthenticated: Boolean(meQuery.data),
     };
@@ -58,6 +61,7 @@ export function useAuth(options?: UseAuthOptions) {
     meQuery.data,
     meQuery.error,
     meQuery.isLoading,
+    meQuery.isFetching,
     logoutMutation.error,
     logoutMutation.isPending,
   ]);

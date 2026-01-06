@@ -39,17 +39,35 @@ const GlowingCard = ({ children, className, delay = 0 }: { children: React.React
 // --- 主页面组件 ---
 export default function Home() {
   const { user, loading, isAuthenticated } = useAuth();
-  const [location] = useLocation();
-  
+  const [location, setLocation] = useLocation();
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-indigo-500 font-medium font-mono">
-        INITIALIZING REPOSITORY...
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">加载中...</p>
+        </div>
       </div>
     );
   }
 
-  // --- 登录后视图 (保持不变) ---
+  // 未登录直接跳转登录页
+  if (!isAuthenticated) {
+    // 使用 useEffect 会更好，但这里用简单的方式
+    if (typeof window !== "undefined" && window.location.pathname !== getLoginUrl()) {
+      window.location.href = getLoginUrl();
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-muted-foreground">正在跳转到登录页...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- 登录后视图 ---
   if (isAuthenticated) {
     return (
       <DashboardLayout>
@@ -124,172 +142,8 @@ export default function Home() {
     );
   }
 
-  // --- 未登录：Bento Grid Repository Theme ---
-  return (
-    <div className="relative min-h-screen bg-slate-950 font-sans selection:bg-indigo-500/30 text-slate-200 overflow-x-hidden">
-      <DotBackground />
-      
-      {/* 顶部光晕 */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none opacity-50" />
-
-      {/* Navbar */}
-      <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-slate-950/80 backdrop-blur-md">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">
-              <Database className="w-4 h-4" />
-            </div>
-            <span className="font-bold text-lg tracking-tight text-white">{APP_TITLE}</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <a href={getLoginUrl()} className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
-              访问系统
-            </a>
-            <Button asChild size="sm" className="bg-white text-black hover:bg-slate-200 font-medium">
-              <a href={getLoginUrl()}>登录</a>
-            </Button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <div className="container mx-auto px-6 pt-32 pb-24 relative z-10">
-        
-        {/* Hero Header */}
-        <div className="max-w-3xl mx-auto text-center mb-20">
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-4xl md:text-6xl font-bold tracking-tight text-white mb-6"
-          >
-            您的 AI 教学<br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
-              智能中心
-            </span>
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-lg text-slate-400 max-w-2xl mx-auto"
-          >
-            教学 AI 工作流的统一操作系统。存储指令、编排智能助手、部署教学场景，一站式管理您的教学资产。
-          </motion.p>
-        </div>
-
-        {/* Bento Grid Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-6xl mx-auto">
-          
-          {/* Card 1: Prompt Library (Large, spans 2 cols) */}
-          <GlowingCard className="md:col-span-2 md:row-span-2 min-h-[300px]" delay={1}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded bg-blue-500/10 text-blue-400">
-                <BookOpen className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">教学指令库</h3>
-                <p className="text-sm text-slate-500">版本化指令管理</p>
-              </div>
-            </div>
-            <div className="flex-1 bg-slate-950/50 rounded-lg border border-slate-800 p-4 font-mono text-xs text-slate-300 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-8 bg-slate-900 border-b border-slate-800 flex items-center px-3 gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-500/20" />
-                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20" />
-                <div className="w-2.5 h-2.5 rounded-full bg-green-500/20" />
-              </div>
-              <div className="mt-6 space-y-2">
-                <p><span className="text-purple-400">const</span> <span className="text-blue-400">lessonPlan</span> = <span className="text-green-400">await</span> ai.generate({`{`}</p>
-                <p className="pl-4"><span className="text-sky-400">role</span>: <span className="text-orange-300">"Physics Teacher"</span>,</p>
-                <p className="pl-4"><span className="text-sky-400">topic</span>: <span className="text-orange-300">"Quantum Mechanics"</span>,</p>
-                <p className="pl-4"><span className="text-sky-400">level</span>: <span className="text-orange-300">"High School"</span></p>
-                <p>{`}`});</p>
-                <p className="text-slate-600 animate-pulse">_</p>
-              </div>
-            </div>
-          </GlowingCard>
-
-          {/* Card 2: Agents (Tall) */}
-          <GlowingCard className="md:row-span-2 min-h-[300px]" delay={2}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded bg-purple-500/10 text-purple-400">
-                <Cpu className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">智能助教</h3>
-                <p className="text-sm text-slate-500">自主学习辅导</p>
-              </div>
-            </div>
-            <div className="flex-1 flex items-center justify-center relative">
-              <div className="absolute inset-0 bg-gradient-to-t from-purple-500/5 to-transparent rounded-full blur-2xl" />
-              <div className="relative z-10 w-24 h-24 rounded-full border border-purple-500/30 flex items-center justify-center bg-purple-500/5 backdrop-blur-md">
-                <GraduationCap className="w-10 h-10 text-purple-400" />
-                {/* Orbiting dots */}
-                <div className="absolute w-full h-full animate-spin-slow border border-dashed border-purple-500/20 rounded-full" />
-              </div>
-            </div>
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-800/50 p-2 rounded">
-                <span>数学助教</span>
-                <span className="text-green-400">在线</span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-800/50 p-2 rounded">
-                <span>作文批改</span>
-                <span className="text-green-400">运行中</span>
-              </div>
-            </div>
-          </GlowingCard>
-
-          {/* Card 3: Workflows (Wide) */}
-          <GlowingCard className="md:col-span-2" delay={3}>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 rounded bg-cyan-500/10 text-cyan-400">
-                <Network className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">逻辑工作流</h3>
-              </div>
-            </div>
-            <div className="h-16 flex items-center gap-2 overflow-hidden opacity-70">
-              <div className="h-1 w-full bg-gradient-to-r from-slate-800 via-cyan-500/50 to-slate-800 rounded-full relative">
-                <div className="absolute top-0 left-0 h-full w-20 bg-cyan-400 blur-sm animate-shimmer-slide" />
-              </div>
-            </div>
-          </GlowingCard>
-
-          {/* Card 4: Templates (Small) */}
-          <GlowingCard delay={4}>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 rounded bg-pink-500/10 text-pink-400">
-                <LayoutTemplate className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">教学场景</h3>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 mt-2">
-              <Badge variant="outline" className="border-pink-500/20 text-pink-300">试卷生成</Badge>
-              <Badge variant="outline" className="border-pink-500/20 text-pink-300">复习</Badge>
-              <Badge variant="outline" className="border-pink-500/20 text-pink-300">测验</Badge>
-            </div>
-          </GlowingCard>
-
-        </div>
-
-        {/* Bottom CTA */}
-        <div className="mt-20 text-center">
-          <Button asChild size="lg" className="h-12 px-8 text-base bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-900/20 rounded-lg">
-            <a href={getLoginUrl()}>
-              开始使用 <ArrowRight className="ml-2 w-4 h-4" />
-            </a>
-          </Button>
-          <p className="mt-4 text-xs text-slate-500 font-mono">
-            安全连接 • 加密存储 • V1.0.0
-          </p>
-        </div>
-
-      </div>
-    </div>
-  );
+  // 不应该到达这里
+  return null;
 }
 
 // 智能推荐区域组件
