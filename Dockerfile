@@ -20,6 +20,18 @@ RUN pnpm install
 # Copy source code
 COPY . .
 
+# Accept build arguments for Vite environment variables
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_APP_TITLE
+ARG VITE_APP_LOGO
+
+# Make build args available as environment variables during build
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+ENV VITE_APP_TITLE=${VITE_APP_TITLE}
+ENV VITE_APP_LOGO=${VITE_APP_LOGO}
+
 # Build the application
 RUN pnpm run build
 

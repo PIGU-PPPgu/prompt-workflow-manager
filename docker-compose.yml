@@ -38,6 +38,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_APP_TITLE: ${VITE_APP_TITLE:-TeachPT}
+        VITE_APP_LOGO: ${VITE_APP_LOGO:-/teachpt-logo.png}
     container_name: teachpt-app
     restart: unless-stopped
     ports:
