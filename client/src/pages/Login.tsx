@@ -48,6 +48,14 @@ export default function Login() {
           return;
         }
 
+        // 确保 session 已经建立
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          setError("登录失败：无法获取会话信息");
+          setLoading(false);
+          return;
+        }
+
         setMessage("登录成功，即将进入应用...");
         setTimeout(() => setLocation("/"), 600);
       } else {

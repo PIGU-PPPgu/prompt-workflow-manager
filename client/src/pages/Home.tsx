@@ -292,16 +292,16 @@ export default function Home() {
   );
 }
 
-// 智能推荐区域组件 (保持不变)
+// 智能推荐区域组件
 function RecommendationSection() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { data: topUsed } = trpc.prompts.topUsed.useQuery(
     { limit: 3 },
-    { enabled: !!user }
+    { enabled: isAuthenticated && !!user }
   );
   const { data: recentlyUsed } = trpc.prompts.recentlyUsed.useQuery(
     { limit: 3 },
-    { enabled: !!user }
+    { enabled: isAuthenticated && !!user }
   );
 
   if ((!topUsed || topUsed.length === 0) && (!recentlyUsed || recentlyUsed.length === 0)) {

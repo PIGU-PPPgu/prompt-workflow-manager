@@ -19,6 +19,9 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
+  // 避免在登录页重复跳转
+  if (window.location.pathname === getLoginUrl()) return;
+
   window.location.href = getLoginUrl();
 };
 
