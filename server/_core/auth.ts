@@ -51,11 +51,16 @@ async function verifyWithRemoteJwks(
 }
 
 async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPayload | null> {
+  // 调试: 打印 token 的前 50 个字符和 secret 信息
+  console.log("[Auth] Verifying JWT token (first 50 chars):", token.substring(0, 50) + "...");
+  console.log("[Auth] JWT Secret configured:", ENV.supabaseJwtSecret ? `Yes (${ENV.supabaseJwtSecret.length} chars)` : "No");
+
   // 1) Supabase Cloud / 本地开发: 优先使用 HS256 Secret 验证
   if (ENV.supabaseJwtSecret) {
     // 尝试方式1: 直接使用 UTF-8 编码的 secret（最常见情况）
     try {
       const rawSecretKey = encoder.encode(ENV.supabaseJwtSecret);
+      console.log("[Auth] Trying raw UTF-8 secret, key length:", rawSecretKey.length);
       const { payload } = await jwtVerify(
         token,
         rawSecretKey,
@@ -63,13 +68,14 @@ async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPayload | nu
       );
       console.log("[Auth] JWT verified with raw UTF-8 secret");
       return payload as SupabaseJwtPayload;
-    } catch {
-      // UTF-8 验证失败，尝试下一种方式
+    } catch (rawError: any) {
+      console.log("[Auth] Raw UTF-8 verification failed:", rawError.code || rawError.message);
     }
 
     // 尝试方式2: base64 解码后的 secret
     try {
       const decoded = Buffer.from(ENV.supabaseJwtSecret, 'base64');
+      console.log("[Auth] Trying base64 decoded secret, decoded length:", decoded.length);
       if (decoded.length > 0) {
         const decodedSecretKey = new Uint8Array(decoded);
         const { payload } = await jwtVerify(
@@ -80,11 +86,13 @@ async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPayload | nu
         console.log("[Auth] JWT verified with base64 decoded secret");
         return payload as SupabaseJwtPayload;
       }
-    } catch {
-      // base64 验证也失败
+    } catch (base64Error: any) {
+      console.log("[Auth] Base64 decoded verification failed:", base64Error.code || base64Error.message);
     }
 
     console.warn("[Auth] HS256 verification failed with both raw and base64 secret");
+  } else {
+    console.warn("[Auth] No SUPABASE_JWT_SECRET configured");
   }
 
   // 2) 自托管 Supabase: 使用 JWKS (ES/RS 签名)
