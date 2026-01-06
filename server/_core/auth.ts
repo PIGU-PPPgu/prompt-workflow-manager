@@ -55,12 +55,28 @@ async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPayload | nu
   const jwksPayload = await verifyWithRemoteJwks(token);
   if (jwksPayload) return jwksPayload;
 
-  // 2) 旧版/本地开发: 使用 HS256 Secret 验证
+  // 2) Supabase Cloud / 本地开发: 使用 HS256 Secret 验证
   if (ENV.supabaseJwtSecret) {
     try {
+      // Supabase JWT secret 可能是 base64 编码的，尝试解码
+      let secretKey: Uint8Array;
+      try {
+        // 尝试 base64 解码
+        const decoded = Buffer.from(ENV.supabaseJwtSecret, 'base64');
+        // 验证是否是有效的 base64（解码后重新编码应该匹配）
+        if (decoded.toString('base64') === ENV.supabaseJwtSecret) {
+          secretKey = new Uint8Array(decoded);
+        } else {
+          secretKey = encoder.encode(ENV.supabaseJwtSecret);
+        }
+      } catch {
+        // 如果不是有效的 base64，直接使用 UTF-8 编码
+        secretKey = encoder.encode(ENV.supabaseJwtSecret);
+      }
+
       const { payload } = await jwtVerify(
         token,
-        encoder.encode(ENV.supabaseJwtSecret),
+        secretKey,
         { algorithms: ["HS256", "HS384", "HS512"] }
       );
       return payload as SupabaseJwtPayload;
