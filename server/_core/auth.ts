@@ -1,5 +1,9 @@
 import type { Request } from "express";
-import { jwtVerify, importJWK, type JWTPayload, type KeyLike } from "jose";
+import {
+  createRemoteJWKSet,
+  jwtVerify,
+  type JWTPayload,
+} from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
@@ -13,25 +17,9 @@ type SupabaseJwtPayload = JWTPayload & {
 
 const encoder = new TextEncoder();
 
-// Supabase ES256 公钥 (JWK 格式)
-const SUPABASE_JWK = {
-  "x": "LzZGPnouBoh2U1xFf_DcmSuMQLs6DdcBaZiQLOkqYD0",
-  "y": "dfuKYEc6DG9dQXNBFubBV9T1iF7XqAJUMCswHMfF548",
-  "alg": "ES256",
-  "crv": "P-256",
-  "ext": true,
-  "kid": "bdfafc57-b0e6-4e69-97fe-a886830ad366",
-  "kty": "EC",
-  "key_ops": ["verify"]
-};
-
-let cachedPublicKey: KeyLike | null = null;
-
-async function getSupabasePublicKey(): Promise<KeyLike> {
-  if (cachedPublicKey) return cachedPublicKey;
-  cachedPublicKey = await importJWK(SUPABASE_JWK, "ES256") as KeyLike;
-  return cachedPublicKey;
-}
+let supabaseJwksClient:
+  | ReturnType<typeof createRemoteJWKSet>
+  | null = null;
 
 function extractBearerToken(req: Request): string | null {
   const header = req.headers.authorization || req.headers.Authorization;
@@ -41,31 +29,48 @@ function extractBearerToken(req: Request): string | null {
   return value.trim();
 }
 
-async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPayload | null> {
-  // 首先尝试 ES256 验证 (新版 Supabase)
+async function verifyWithRemoteJwks(
+  token: string
+): Promise<SupabaseJwtPayload | null> {
+  if (!ENV.supabaseUrl) return null;
+
   try {
-    const publicKey = await getSupabasePublicKey();
-    const { payload } = await jwtVerify(token, publicKey, {
-      algorithms: ["ES256"]
+    if (!supabaseJwksClient) {
+      const jwksUrl = new URL("/auth/v1/certs", ENV.supabaseUrl);
+      supabaseJwksClient = createRemoteJWKSet(jwksUrl);
+    }
+
+    const { payload } = await jwtVerify(token, supabaseJwksClient, {
+      algorithms: ["RS256", "ES256"],
     });
     return payload as SupabaseJwtPayload;
-  } catch (es256Error: any) {
-    // 如果 ES256 失败，尝试 HS256 (旧版 Supabase 或 Legacy secret)
-    if (ENV.supabaseJwtSecret) {
-      try {
-        const { payload } = await jwtVerify(
-          token,
-          encoder.encode(ENV.supabaseJwtSecret),
-          { algorithms: ["HS256", "HS384", "HS512"] }
-        );
-        return payload as SupabaseJwtPayload;
-      } catch (hs256Error) {
-        console.warn("[Auth] HS256 verification also failed:", hs256Error);
-      }
-    }
-    console.warn("[Auth] Supabase JWT verification failed:", es256Error);
+  } catch (error) {
+    console.warn("[Auth] Supabase JWKS verification failed:", error);
     return null;
   }
+}
+
+async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPayload | null> {
+  // 1) 新版 Supabase: 使用 JWKS (ES/RS 签名)
+  const jwksPayload = await verifyWithRemoteJwks(token);
+  if (jwksPayload) return jwksPayload;
+
+  // 2) 旧版/本地开发: 使用 HS256 Secret 验证
+  if (ENV.supabaseJwtSecret) {
+    try {
+      const { payload } = await jwtVerify(
+        token,
+        encoder.encode(ENV.supabaseJwtSecret),
+        { algorithms: ["HS256", "HS384", "HS512"] }
+      );
+      return payload as SupabaseJwtPayload;
+    } catch (hs256Error) {
+      console.warn("[Auth] HS256 verification failed:", hs256Error);
+    }
+  }
+
+  console.warn("[Auth] Supabase JWT verification failed for all strategies");
+  return null;
 }
 
 function deriveDisplayName(payload: SupabaseJwtPayload): string | null {
@@ -76,11 +81,14 @@ function deriveDisplayName(payload: SupabaseJwtPayload): string | null {
     meta["display_name"],
     payload.email,
   ];
-  return (
-    candidates.find(
-      value => typeof value === "string" && value.trim().length > 0
-    ) ?? null
-  );
+
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 export async function authenticateRequest(req: Request): Promise<User | null> {
@@ -110,5 +118,6 @@ export async function authenticateRequest(req: Request): Promise<User | null> {
     return null;
   }
 
-  return db.getUserByOpenId(openId);
+  const user = await db.getUserByOpenId(openId);
+  return user ?? null;
 }
