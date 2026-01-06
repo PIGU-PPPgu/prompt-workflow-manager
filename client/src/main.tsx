@@ -11,7 +11,7 @@ import "./index.css";
 
 const queryClient = new QueryClient();
 
-const redirectToLoginIfUnauthorized = (error: unknown) => {
+const redirectToLoginIfUnauthorized = async (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
 
@@ -21,6 +21,13 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   // 避免在登录页重复跳转
   if (window.location.pathname === getLoginUrl()) return;
+
+  // 如果本地已经有 Supabase 会话，可能是后端环境/权限问题，先不强制跳转
+  const { data } = await supabase.auth.getSession();
+  if (data.session) {
+    console.warn("[Auth] Received UNAUTHORIZED but session exists; skipping redirect");
+    return;
+  }
 
   window.location.href = getLoginUrl();
 };
