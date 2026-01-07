@@ -5,8 +5,10 @@
 # Stage 1: Build
 FROM node:20-alpine AS builder
 
-# Install pnpm
-RUN npm install -g pnpm@10
+# Install pnpm and configure registry
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm install -g pnpm@10 && \
+    pnpm config set registry https://registry.npmmirror.com
 
 WORKDIR /app
 
@@ -39,8 +41,10 @@ RUN pnpm run build
 # Stage 2: Production
 FROM node:20-alpine AS runner
 
-# Install pnpm
-RUN npm install -g pnpm@10
+# Install pnpm and configure registry
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm install -g pnpm@10 && \
+    pnpm config set registry https://registry.npmmirror.com
 
 WORKDIR /app
 
