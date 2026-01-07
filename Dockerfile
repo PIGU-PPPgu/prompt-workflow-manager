@@ -6,9 +6,9 @@
 FROM node:20-alpine AS builder
 
 # Install pnpm and configure registry
-RUN npm config set registry https://registry.npmmirror.com && \
+RUN npm config set registry http://mirrors.cloud.tencent.com/npm/ && \
     npm install -g pnpm@10 && \
-    pnpm config set registry https://registry.npmmirror.com
+    pnpm config set registry http://mirrors.cloud.tencent.com/npm/
 
 WORKDIR /app
 
@@ -42,9 +42,9 @@ RUN pnpm run build
 FROM node:20-alpine AS runner
 
 # Install pnpm and configure registry
-RUN npm config set registry https://registry.npmmirror.com && \
+RUN npm config set registry http://mirrors.cloud.tencent.com/npm/ && \
     npm install -g pnpm@10 && \
-    pnpm config set registry https://registry.npmmirror.com
+    pnpm config set registry http://mirrors.cloud.tencent.com/npm/
 
 WORKDIR /app
 
