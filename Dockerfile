@@ -6,7 +6,7 @@
 FROM node:20-alpine AS builder
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+RUN npm install -g pnpm@10
 
 WORKDIR /app
 
@@ -40,7 +40,7 @@ RUN pnpm run build
 FROM node:20-alpine AS runner
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+RUN npm install -g pnpm@10
 
 WORKDIR /app
 
