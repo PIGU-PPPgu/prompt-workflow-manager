@@ -15,12 +15,13 @@ import { ScenarioCategoryDialog } from "@/components/ScenarioCategoryDialog";
 import { SortableScenarioItem } from "@/components/SortableScenarioItem";
 import { CategoryAssistantChat } from "@/components/CategoryAssistantChat";
 import { ImportCategoryTemplate } from "@/components/ImportCategoryTemplate";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 
 type ViewMode = "tree" | "card";
 
 export default function ScenarioBrowser() {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [aiGenerateDialogOpen, setAiGenerateDialogOpen] = useState(false);
@@ -50,9 +51,24 @@ export default function ScenarioBrowser() {
   const currentDisplayItems = useMemo(() => {
     if (!scenarios) return [];
 
+    // 调试：打印所有分类的层级关系
+    console.log('📊 数据库场景分类总览:', {
+      total: scenarios.length,
+      level1: scenarios.filter(s => s.level === 1).map(s => ({ id: s.id, name: s.name })),
+      level2: scenarios.filter(s => s.level === 2).map(s => ({ id: s.id, name: s.name, parentId: s.parentId })),
+      level3: scenarios.filter(s => s.level === 3).map(s => ({ id: s.id, name: s.name, parentId: s.parentId })),
+    });
+
+    console.log('计算 currentDisplayItems:', {
+      scenariosCount: scenarios.length,
+      navigationPathLength: navigationPath.length,
+      navigationPath
+    });
+
     // 如果没有导航路径，显示一级分类
     if (navigationPath.length === 0) {
       let items = scenarios.filter(s => s.level === 1);
+      console.log('显示一级分类:', items.length);
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         items = items.filter(s =>
@@ -67,6 +83,7 @@ export default function ScenarioBrowser() {
     if (navigationPath.length === 1) {
       const parentId = navigationPath[0].id;
       let items = scenarios.filter(s => s.level === 2 && s.parentId === parentId);
+      console.log('显示二级分类:', { parentId, count: items.length, items: items.map(i => ({ id: i.id, name: i.name })) });
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         items = items.filter(s =>
@@ -81,6 +98,7 @@ export default function ScenarioBrowser() {
     if (navigationPath.length === 2) {
       const parentId = navigationPath[1].id;
       let items = scenarios.filter(s => s.level === 3 && s.parentId === parentId);
+      console.log('显示三级分类:', { parentId, count: items.length, items: items.map(i => ({ id: i.id, name: i.name, parentId: i.parentId })) });
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         items = items.filter(s =>
@@ -217,7 +235,7 @@ export default function ScenarioBrowser() {
 
   // 处理URL参数中的highlight,用于高亮显示特定场景
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.split('?')[1] || '');
+    const urlParams = new URLSearchParams(search ?? '');
     const highlightParam = urlParams.get('highlight');
 
     if (highlightParam) {
@@ -235,7 +253,7 @@ export default function ScenarioBrowser() {
         }, 300);
       }
     }
-  }, [location]);
+  }, [search]);
 
   const utils = trpc.useUtils();
   
@@ -253,6 +271,16 @@ export default function ScenarioBrowser() {
     onSuccess: () => {
       utils.scenarios.list.invalidate();
       toast.success("排序已更新");
+    },
+  });
+
+  const initializePresetsMutation = trpc.scenarios.initializePresets.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      utils.scenarios.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error("操作失败: " + error.message);
     },
   });
   
@@ -521,11 +549,22 @@ export default function ScenarioBrowser() {
                   isHighlighted ? 'ring-2 ring-primary shadow-lg' : ''
                 }`}
                 onClick={() => {
-                  // 如果是三级分类，跳转到提示词列表
-                  if (currentLevel === 3) {
+                  console.log('点击分类:', {
+                    itemId: item.id,
+                    itemName: item.name,
+                    itemLevel: item.level,
+                    currentLevel,
+                    navigationPath
+                  });
+
+                  // 根据当前显示的级别判断：三级分类才跳转
+                  if (item.level === 3) {
+                    console.log('跳转到提示词列表，URL:', `/prompts?scenario=${item.id}`);
+                    // 使用 setLocation 实现 SPA 导航，保留查询参数
                     setLocation(`/prompts?scenario=${item.id}`);
                   } else {
-                    // 否则进入下一级（使用函数式更新避免竞态）
+                    // 一级或二级分类，进入下一级
+                    console.log('进入下一级分类');
                     setNavigationPath(prev => [...prev, { id: item.id, name: item.name, level: item.level }]);
                   }
                 }}
@@ -560,13 +599,61 @@ export default function ScenarioBrowser() {
 
         {viewMode === "card" && currentDisplayItems.length === 0 && (
           <div className="text-center py-12 border border-dashed border-border rounded-lg">
-            <p className="text-muted-foreground mb-4">
+            <p className="text-muted-foreground mb-2">
               {navigationPath.length > 0 ? '该分类下暂无子分类' : '暂无应用场景分类'}
             </p>
-            <Button variant="outline" onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              创建第一个分类
-            </Button>
+            {navigationPath.length > 0 && (
+              <div className="space-y-4 mb-4">
+                <p className="text-sm text-muted-foreground">
+                  你可以添加自定义分类，或者返回上级查看其他分类
+                </p>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md mx-auto">
+                  <p className="text-sm text-yellow-900 font-medium mb-2">🔧 数据修复</p>
+                  <p className="text-sm text-yellow-800 mb-3">
+                    如果预设分类的子分类丢失，可以重置预设数据来修复
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm('确定要重置预设分类吗？这将删除所有系统预设分类并重新创建，用户自定义分类不受影响。')) {
+                        initializePresetsMutation.mutate({ forceReset: true });
+                      }
+                    }}
+                    disabled={initializePresetsMutation.isPending}
+                    className="w-full"
+                  >
+                    {initializePresetsMutation.isPending ? "重置中..." : "🔄 重置预设分类"}
+                  </Button>
+                </div>
+              </div>
+            )}
+            {navigationPath.length === 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 max-w-xl mx-auto mb-4 mt-4">
+                <p className="text-sm text-blue-900 font-medium mb-2">💡 首次使用提示</p>
+                <p className="text-sm text-blue-800 mb-4">
+                  系统检测到场景分类为空。点击下方按钮即可初始化教育教学、班级管理、教研工作等完整的三级分类体系。
+                </p>
+                <Button
+                  onClick={() => initializePresetsMutation.mutate()}
+                  disabled={initializePresetsMutation.isPending}
+                  className="w-full"
+                >
+                  {initializePresetsMutation.isPending ? "初始化中..." : "✨ 一键初始化预设分类"}
+                </Button>
+              </div>
+            )}
+            <div className="flex gap-2 justify-center">
+              {navigationPath.length > 0 && (
+                <Button variant="outline" onClick={() => setNavigationPath(prev => prev.slice(0, -1))}>
+                  返回上级
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                {navigationPath.length > 0 ? '添加子分类' : '创建第一个分类'}
+              </Button>
+            </div>
           </div>
         )}
       </div>

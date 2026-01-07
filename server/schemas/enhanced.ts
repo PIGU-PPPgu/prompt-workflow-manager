@@ -64,16 +64,15 @@ export const ApiKeyValue = z.string().refine(
 /**
  * 密码 Schema
  */
-export const Password = z.string().refine(
-  (val) => {
-    const result = validatePasswordStrength(val);
-    return result.valid;
-  },
-  (val) => {
-    const result = validatePasswordStrength(val);
-    return { message: result.error || '密码强度不足' };
+export const Password = z.string().superRefine((val, ctx) => {
+  const result = validatePasswordStrength(val);
+  if (!result.valid) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: result.error || '密码强度不足',
+    });
   }
-);
+});
 
 // ============ 业务 Schema ============
 
@@ -120,34 +119,30 @@ export const TextbookVersion = z.string().max(200).optional().transform((val) =>
 /**
  * CSV 内容 Schema
  */
-export const CsvContent = z.string().refine(
-  (val) => {
-    const { validateCsvContent } = require('../middleware/inputValidation');
-    const result = validateCsvContent(val, VALIDATION_CONFIG.file.maxSizeMB);
-    return result.valid;
-  },
-  (val) => {
-    const { validateCsvContent } = require('../middleware/inputValidation');
-    const result = validateCsvContent(val, VALIDATION_CONFIG.file.maxSizeMB);
-    return { message: result.error || 'CSV 内容不合法' };
+export const CsvContent = z.string().superRefine((val, ctx) => {
+  const { validateCsvContent } = require('../middleware/inputValidation');
+  const result = validateCsvContent(val, VALIDATION_CONFIG.file.maxSizeMB);
+  if (!result.valid) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: result.error || 'CSV 内容不合法',
+    });
   }
-);
+});
 
 /**
  * JSON 内容 Schema
  */
-export const JsonContent = z.string().refine(
-  (val) => {
-    const { validateJsonContent } = require('../middleware/inputValidation');
-    const result = validateJsonContent(val, VALIDATION_CONFIG.file.maxSizeMB);
-    return result.valid;
-  },
-  (val) => {
-    const { validateJsonContent } = require('../middleware/inputValidation');
-    const result = validateJsonContent(val, VALIDATION_CONFIG.file.maxSizeMB);
-    return { message: result.error || 'JSON 内容不合法' };
+export const JsonContent = z.string().superRefine((val, ctx) => {
+  const { validateJsonContent } = require('../middleware/inputValidation');
+  const result = validateJsonContent(val, VALIDATION_CONFIG.file.maxSizeMB);
+  if (!result.valid) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: result.error || 'JSON 内容不合法',
+    });
   }
-);
+});
 
 // ============ 创建提示词 Schema（完整） ============
 
@@ -189,30 +184,27 @@ export const UpdatePromptInput = z.object({
 export const ImportTemplateInput = z.object({
   fileContent: z.string(),
   fileType: z.enum(['csv', 'json']),
-}).refine(
-  (data) => {
-    if (data.fileType === 'csv') {
-      const { validateCsvContent } = require('../middleware/inputValidation');
-      const result = validateCsvContent(data.fileContent);
-      return result.valid;
-    } else {
-      const { validateJsonContent } = require('../middleware/inputValidation');
-      const result = validateJsonContent(data.fileContent);
-      return result.valid;
+}).superRefine((data, ctx) => {
+  if (data.fileType === 'csv') {
+    const { validateCsvContent } = require('../middleware/inputValidation');
+    const result = validateCsvContent(data.fileContent);
+    if (!result.valid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: result.error || '文件内容不合法',
+      });
     }
-  },
-  (data) => {
-    if (data.fileType === 'csv') {
-      const { validateCsvContent } = require('../middleware/inputValidation');
-      const result = validateCsvContent(data.fileContent);
-      return { message: result.error || '文件内容不合法' };
-    } else {
-      const { validateJsonContent } = require('../middleware/inputValidation');
-      const result = validateJsonContent(data.fileContent);
-      return { message: result.error || '文件内容不合法' };
+  } else {
+    const { validateJsonContent } = require('../middleware/inputValidation');
+    const result = validateJsonContent(data.fileContent);
+    if (!result.valid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: result.error || '文件内容不合法',
+      });
     }
   }
-);
+});
 
 // ============ API Key Schema（增强） ============
 
@@ -224,9 +216,21 @@ export const CreateApiKeyInput = z.object({
   provider: z.string()
     .min(1, '提供商不能为空')
     .max(50, '提供商名称不能超过50个字符'),
-  apiUrl: SafeUrl.optional(),
+  apiUrl: z.string().url('URL 格式不正确').optional(),  // 宽松验证，允许各种 AI API 服务商
   keyValue: ApiKeyValue,
   models: z.string().optional(),
+  modelMetadata: z.string().optional(),
+});
+
+export const UpdateApiKeyInput = z.object({
+  id: z.number(),
+  name: z.string().optional(),
+  provider: z.string().optional(),
+  apiUrl: z.string().url('URL 格式不正确').optional(),  // 宽松验证，允许各种 AI API 服务商
+  keyValue: ApiKeyValue.optional(),
+  models: z.string().optional(),
+  modelMetadata: z.string().optional(),
+  isActive: z.boolean().optional(),
 });
 
 // ============ 用户输入 Schema ============

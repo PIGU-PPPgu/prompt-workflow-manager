@@ -219,7 +219,10 @@ function DashboardLayoutContent({
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div 
+                    className="flex items-center gap-3 min-w-0 cursor-pointer transition-opacity hover:opacity-80"
+                    onClick={() => setLocation("/")}
+                  >
                     <img
                       src={APP_LOGO}
                       className="h-8 w-8 rounded-md object-cover ring-1 ring-border shrink-0"

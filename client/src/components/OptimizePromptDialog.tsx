@@ -122,9 +122,8 @@ export function OptimizePromptDialog({ open, onOpenChange, content, onOptimized 
 
     optimizeMutation.mutate({
       content,
-      targetModel: "general", // 保持兼容性，暂时传递 general
+      targetModel: "general",
       intensity,
-      models: selectedModels, // 传递选中的模型列表
     });
   };
 

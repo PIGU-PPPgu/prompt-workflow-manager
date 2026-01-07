@@ -14,6 +14,14 @@ import sanitizeHtmlLib from 'sanitize-html';
 import { promises as dns } from 'dns';
 import * as ipaddr from 'ipaddr.js';
 
+// ============ Type Guards ============
+
+/**
+ * Type guard to check if an IP address is IPv6
+ */
+const isIPv6 = (addr: ipaddr.IPv4 | ipaddr.IPv6): addr is ipaddr.IPv6 =>
+  addr.kind() === 'ipv6';
+
 // ============ XSS 防护 ============
 
 /**
@@ -257,7 +265,7 @@ export async function isSafeUrl(url: string): Promise<{ safe: boolean; reason?: 
         }
 
         // 检查是否为 IPv4 映射的 IPv6 地址（可能绕过检查）
-        if (addr.kind() === 'ipv6' && addr.isIPv4MappedAddress()) {
+        if (isIPv6(addr) && addr.isIPv4MappedAddress()) {
           const ipv4 = addr.toIPv4Address();
           if (ipv4.range() === 'private' ||
               ipv4.range() === 'loopback' ||
@@ -336,7 +344,7 @@ export function isSafeUrlSync(url: string): { safe: boolean; reason?: string } {
         }
 
         // 检查 IPv4 映射的 IPv6
-        if (addr.kind() === 'ipv6' && addr.isIPv4MappedAddress()) {
+        if (isIPv6(addr) && addr.isIPv4MappedAddress()) {
           const ipv4 = addr.toIPv4Address();
           if (ipv4.range() === 'private' ||
               ipv4.range() === 'loopback' ||

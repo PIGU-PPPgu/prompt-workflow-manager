@@ -24,6 +24,7 @@ import { trpc } from "@/lib/trpc";
 import { cn, parseTags } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
+import Landing from "./Landing";
 
 // --- Hero Section ---
 const HeroSection = ({ userName }: { userName?: string }) => {
@@ -355,10 +356,7 @@ export default function Home() {
   }
 
   if (!isAuthenticated) {
-    if (typeof window !== "undefined" && window.location.pathname !== getLoginUrl()) {
-      window.location.href = getLoginUrl();
-    }
-    return null;
+    return <Landing />;
   }
 
   return (

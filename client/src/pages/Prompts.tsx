@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
-import { Plus, Search, Edit, Trash2, Copy, Sparkles, BarChart3, Play, Filter, Eye, Star, Tag, CheckSquare, Square, Download, AlertCircle, FolderTree } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Copy, Sparkles, BarChart3, Play, Filter, Eye, Star, Tag, CheckSquare, Square, Download, AlertCircle, FolderTree, Info } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import {
@@ -21,7 +22,8 @@ import {
 } from "@/components/ui/select";
 
 export default function Prompts() {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory1, setSelectedCategory1] = useState<string>("all");
   const [selectedCategory2, setSelectedCategory2] = useState<string>("all");
@@ -45,6 +47,8 @@ export default function Prompts() {
   });
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [batchMode, setBatchMode] = useState(false);
+  const [scoreDetailOpen, setScoreDetailOpen] = useState(false);
+  const [selectedScoreDetail, setSelectedScoreDetail] = useState<any>(null);
 
   const { user } = useAuth();
   const { data: prompts, isLoading } = trpc.prompts.list.useQuery({
@@ -63,8 +67,10 @@ export default function Prompts() {
 
   // 处理URL参数中的scenario,用于创建提示词时自动设置场景，并自动筛选
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.split('?')[1] || '');
+    const urlParams = new URLSearchParams(search ?? "");
     const scenarioParam = urlParams.get('scenario');
+
+    console.log('📍 Prompts 页面 URL 参数:', { scenarioParam, search });
 
     // 如果没有 scenario 参数，重置筛选状态
     if (!scenarioParam) {
@@ -72,6 +78,7 @@ export default function Prompts() {
       setSelectedCategory2("all");
       setSelectedCategory3("all");
       setDefaultScenarioId(undefined);
+      console.log('🔄 无 scenario 参数，重置筛选');
       return;
     }
 
@@ -83,11 +90,14 @@ export default function Prompts() {
         setSelectedCategory2("all");
         setSelectedCategory3("all");
         setDefaultScenarioId(undefined);
+        console.log('❌ scenario 参数无效:', scenarioParam);
         return;
       }
 
       // 找到该场景并设置筛选状态
       const scenario = scenarios.find(s => s.id === scenarioId);
+      console.log('🔍 查找场景:', { scenarioId, found: !!scenario, scenario });
+
       if (!scenario) {
         // 场景不存在，重置状态并提示
         setSelectedCategory1("all");
@@ -103,6 +113,7 @@ export default function Prompts() {
 
       if (scenario.level === 1) {
         // 一级分类
+        console.log('✅ 设置一级分类筛选:', scenario.id);
         setSelectedCategory1(scenario.id.toString());
         setSelectedCategory2("all");
         setSelectedCategory3("all");
@@ -112,22 +123,31 @@ export default function Prompts() {
           toast.error("场景分类数据不完整");
           return;
         }
+        console.log('✅ 设置二级分类筛选:', { level1: scenario.parentId, level2: scenario.id });
         setSelectedCategory1(scenario.parentId.toString());
         setSelectedCategory2(scenario.id.toString());
         setSelectedCategory3("all");
       } else if (scenario.level === 3) {
         // 三级分类：需要找到父级（二级）和祖父级（一级）
         const parent2 = scenarios.find(s => s.id === scenario.parentId);
+        console.log('🔍 查找父级:', { parent2Id: scenario.parentId, found: !!parent2, parent2 });
+
         if (!parent2 || !parent2.parentId) {
           toast.error("场景分类数据不完整");
+          console.log('❌ 三级分类数据不完整:', { parent2, hasParentId: parent2?.parentId });
           return;
         }
+        console.log('✅ 设置三级分类筛选:', {
+          level1: parent2.parentId,
+          level2: parent2.id,
+          level3: scenario.id
+        });
         setSelectedCategory1(parent2.parentId.toString());
         setSelectedCategory2(parent2.id.toString());
         setSelectedCategory3(scenario.id.toString());
       }
     }
-  }, [location, scenarios]);
+  }, [search, scenarios]);
 
   // 构建分类层级结构
   const level1Scenarios = useMemo(() => {
@@ -158,18 +178,29 @@ export default function Prompts() {
 
   const filteredPrompts = useMemo(() => {
     if (!prompts) return [];
-    
-    return prompts.filter(prompt => {
+
+    console.log('🔍 筛选提示词:', {
+      totalPrompts: prompts.length,
+      selectedCategory1,
+      selectedCategory2,
+      selectedCategory3,
+      searchQuery,
+      filterFavorite,
+      filterMark,
+      metaFilters
+    });
+
+    const filtered = prompts.filter(prompt => {
       // 搜索过滤
-      const matchesSearch = !searchQuery || 
+      const matchesSearch = !searchQuery ||
         prompt.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         prompt.description?.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
       if (!matchesSearch) return false;
-      
+
       // 收藏过滤
       if (filterFavorite && !prompt.isFavorite) return false;
-      
+
       // 标记过滤
       if (filterMark !== "all" && prompt.customMark !== filterMark) return false;
 
@@ -186,31 +217,78 @@ export default function Prompts() {
       if (!matchesMeta("subject")) return false;
       if (!matchesMeta("teachingScene")) return false;
       if (!matchesMeta("textbookVersion")) return false;
-      
+
       // 分类过滤
-      if (!prompt.scenarioId) return selectedCategory1 === "all";
-      
+      if (!prompt.scenarioId) {
+        const result = selectedCategory1 === "all";
+        console.log('  提示词无分类:', { promptId: prompt.id, title: prompt.title, result });
+        return result;
+      }
+
       const scenario = scenarios?.find(s => s.id === prompt.scenarioId);
-      if (!scenario) return selectedCategory1 === "all";
-      
+      if (!scenario) {
+        const result = selectedCategory1 === "all";
+        console.log('  提示词分类不存在:', { promptId: prompt.id, scenarioId: prompt.scenarioId, result });
+        return result;
+      }
+
       // 根据分类层级进行匹配
       if (scenario.level === 1) {
-        return selectedCategory1 === "all" || scenario.id.toString() === selectedCategory1;
+        const result = selectedCategory1 === "all" || scenario.id.toString() === selectedCategory1;
+        console.log('  一级分类匹配:', {
+          promptId: prompt.id,
+          title: prompt.title,
+          scenarioId: scenario.id,
+          selectedCategory1,
+          result
+        });
+        return result;
       } else if (scenario.level === 2) {
         const matchesLevel2 = selectedCategory2 === "all" || scenario.id.toString() === selectedCategory2;
         const matchesLevel1 = selectedCategory1 === "all" || scenario.parentId?.toString() === selectedCategory1;
-        return matchesLevel1 && matchesLevel2;
+        const result = matchesLevel1 && matchesLevel2;
+        console.log('  二级分类匹配:', {
+          promptId: prompt.id,
+          title: prompt.title,
+          scenarioId: scenario.id,
+          parentId: scenario.parentId,
+          selectedCategory1,
+          selectedCategory2,
+          matchesLevel1,
+          matchesLevel2,
+          result
+        });
+        return result;
       } else if (scenario.level === 3) {
         const matchesLevel3 = selectedCategory3 === "all" || scenario.id.toString() === selectedCategory3;
         const parent2 = scenarios?.find(s => s.id === scenario.parentId);
         const matchesLevel2 = selectedCategory2 === "all" || parent2?.id.toString() === selectedCategory2;
         const matchesLevel1 = selectedCategory1 === "all" || parent2?.parentId?.toString() === selectedCategory1;
-        return matchesLevel1 && matchesLevel2 && matchesLevel3;
+        const result = matchesLevel1 && matchesLevel2 && matchesLevel3;
+        console.log('  三级分类匹配:', {
+          promptId: prompt.id,
+          title: prompt.title,
+          scenarioId: scenario.id,
+          scenarioParentId: scenario.parentId,
+          parent2Id: parent2?.id,
+          parent2ParentId: parent2?.parentId,
+          selectedCategory1,
+          selectedCategory2,
+          selectedCategory3,
+          matchesLevel1,
+          matchesLevel2,
+          matchesLevel3,
+          result
+        });
+        return result;
       }
-      
+
       return false;
     });
-  }, [prompts, scenarios, searchQuery, selectedCategory1, selectedCategory2, selectedCategory3, filterFavorite, filterMark]);
+
+    console.log('✅ 筛选完成:', { filteredCount: filtered.length, prompts: filtered.map(p => ({ id: p.id, title: p.title, scenarioId: p.scenarioId })) });
+    return filtered;
+  }, [prompts, scenarios, searchQuery, selectedCategory1, selectedCategory2, selectedCategory3, filterFavorite, filterMark, metaFilters]);
 
   const handleCreate = () => {
     setSelectedPromptId(undefined);
@@ -270,7 +348,13 @@ export default function Prompts() {
   });
 
   const handleScore = (id: number) => {
+    toast.info("AI评分中，预计需要1-3秒...");
     scoreMutation.mutate({ id });
+  };
+
+  const handleShowScoreDetail = (prompt: any) => {
+    setSelectedScoreDetail(prompt);
+    setScoreDetailOpen(true);
   };
 
   const handleUse = (prompt: any) => {
@@ -677,10 +761,11 @@ export default function Prompts() {
                     size="sm"
                     variant="outline"
                     onClick={() => handleScore(prompt.id)}
+                    disabled={scoreMutation.isPending}
                     className="flex-1"
                   >
                     <BarChart3 className="h-3 w-3 mr-1" />
-                    评分
+                    {scoreMutation.isPending ? "评分中..." : "评分"}
                   </Button>
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -694,7 +779,15 @@ export default function Prompts() {
                     )}
                   </div>
                   {prompt.score !== null && prompt.score !== undefined && prompt.score > 0 ? (
-                    <span className="font-medium">评分: {prompt.score}</span>
+                    <button
+                      onClick={() => handleShowScoreDetail(prompt)}
+                      className="flex items-center gap-1 font-medium hover:text-primary transition-colors cursor-pointer"
+                      title="点击查看评分详情"
+                    >
+                      <BarChart3 className="h-3 w-3" />
+                      评分: {prompt.score}
+                      <Info className="h-3 w-3 opacity-50" />
+                    </button>
                   ) : (
                     <span>{new Date(prompt.updatedAt).toLocaleDateString()}</span>
                   )}
@@ -793,6 +886,80 @@ export default function Prompts() {
         promptContent={usePromptContent}
         variables={usePromptVariables}
       />
+
+      {/* 评分详情Dialog */}
+      <Dialog open={scoreDetailOpen} onOpenChange={setScoreDetailOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>评分详情</DialogTitle>
+            <DialogDescription>
+              {selectedScoreDetail?.title}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedScoreDetail && (
+            <div className="space-y-4">
+              <div className="text-center py-4 border-b">
+                <div className="text-4xl font-bold text-primary">
+                  {selectedScoreDetail.score || 0}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">综合评分</div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-semibold text-blue-600">
+                    {selectedScoreDetail.structureScore || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">结构完整性</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-semibold text-green-600">
+                    {selectedScoreDetail.clarityScore || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">清晰度</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-semibold text-purple-600">
+                    {selectedScoreDetail.scenarioScore || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">场景适配度</div>
+                </div>
+              </div>
+
+              {selectedScoreDetail.scoreReason && (() => {
+                try {
+                  const reasons = JSON.parse(selectedScoreDetail.scoreReason);
+                  return (
+                    <div className="space-y-3">
+                      <div className="text-sm font-medium border-b pb-2">详细评价</div>
+                      {reasons.structureReason && (
+                        <div className="text-sm">
+                          <div className="font-medium text-blue-600 mb-1">结构完整性</div>
+                          <div className="text-muted-foreground">{reasons.structureReason}</div>
+                        </div>
+                      )}
+                      {reasons.clarityReason && (
+                        <div className="text-sm">
+                          <div className="font-medium text-green-600 mb-1">清晰度</div>
+                          <div className="text-muted-foreground">{reasons.clarityReason}</div>
+                        </div>
+                      )}
+                      {reasons.scenarioReason && (
+                        <div className="text-sm">
+                          <div className="font-medium text-purple-600 mb-1">场景适配度</div>
+                          <div className="text-muted-foreground">{reasons.scenarioReason}</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                } catch {
+                  return null;
+                }
+              })()}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
@@ -816,28 +983,25 @@ function QuickAccessSection() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
       {/* 最常用 */}
       {topUsed && topUsed.length > 0 && (
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            <h3 className="font-medium text-sm">最常用</h3>
+        <Card className="p-2.5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+            <h3 className="font-medium text-xs">最常用</h3>
           </div>
-          <div className="space-y-2">
-            {topUsed.map((prompt: any) => (
+          <div className="space-y-1">
+            {topUsed.slice(0, 3).map((prompt: any) => (
               <div
                 key={prompt.id}
                 onClick={() => setLocation(`/prompts/${prompt.id}`)}
-                className="flex items-center justify-between p-2 rounded hover:bg-muted cursor-pointer transition-colors"
+                className="flex items-center justify-between p-1.5 rounded hover:bg-muted cursor-pointer transition-colors"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{prompt.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {prompt.description || prompt.content}
-                  </p>
+                  <p className="text-xs font-medium truncate">{prompt.title}</p>
                 </div>
-                <span className="text-xs text-muted-foreground ml-2 whitespace-nowrap">
+                <span className="text-[10px] text-muted-foreground ml-2 whitespace-nowrap">
                   {prompt.useCount || 0} 次
                 </span>
               </div>
@@ -848,26 +1012,23 @@ function QuickAccessSection() {
 
       {/* 最近使用 */}
       {recentlyUsed && recentlyUsed.length > 0 && (
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart3 className="h-4 w-4 text-blue-500" />
-            <h3 className="font-medium text-sm">最近使用</h3>
+        <Card className="p-2.5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <BarChart3 className="h-3.5 w-3.5 text-blue-500" />
+            <h3 className="font-medium text-xs">最近使用</h3>
           </div>
-          <div className="space-y-2">
-            {recentlyUsed.map((prompt: any) => (
+          <div className="space-y-1">
+            {recentlyUsed.slice(0, 3).map((prompt: any) => (
               <div
                 key={prompt.id}
                 onClick={() => setLocation(`/prompts/${prompt.id}`)}
-                className="flex items-center justify-between p-2 rounded hover:bg-muted cursor-pointer transition-colors"
+                className="flex items-center justify-between p-1.5 rounded hover:bg-muted cursor-pointer transition-colors"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{prompt.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {prompt.description || prompt.content}
-                  </p>
+                  <p className="text-xs font-medium truncate">{prompt.title}</p>
                 </div>
-                <span className="text-xs text-muted-foreground ml-2 whitespace-nowrap">
-                  {prompt.lastUsedAt ? new Date(prompt.lastUsedAt).toLocaleDateString() : ''}
+                <span className="text-[10px] text-muted-foreground ml-2 whitespace-nowrap">
+                  {prompt.lastUsedAt ? new Date(prompt.lastUsedAt).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : ''}
                 </span>
               </div>
             ))}
@@ -877,28 +1038,22 @@ function QuickAccessSection() {
 
       {/* 按元数据推荐 */}
       {recommendByMeta && recommendByMeta.length > 0 && (
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <FolderTree className="h-4 w-4 text-green-500" />
-            <h3 className="font-medium text-sm">按学科/场景推荐</h3>
+        <Card className="p-2.5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <FolderTree className="h-3.5 w-3.5 text-green-500" />
+            <h3 className="font-medium text-xs">按学科推荐</h3>
           </div>
-          <div className="space-y-2">
-            {recommendByMeta.map((prompt: any) => (
+          <div className="space-y-1">
+            {recommendByMeta.slice(0, 3).map((prompt: any) => (
               <div
                 key={prompt.id}
                 onClick={() => setLocation(`/prompts/${prompt.id}`)}
-                className="flex items-center justify-between p-2 rounded hover:bg-muted cursor-pointer transition-colors"
+                className="flex items-center justify-between p-1.5 rounded hover:bg-muted cursor-pointer transition-colors"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{prompt.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {prompt.description || prompt.content}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {prompt.subject || "未填学科"} · {prompt.teachingScene || "未填场景"}
-                  </p>
+                  <p className="text-xs font-medium truncate">{prompt.title}</p>
                 </div>
-                <span className="text-xs text-muted-foreground ml-2 whitespace-nowrap">
+                <span className="text-[10px] text-muted-foreground ml-2 whitespace-nowrap">
                   {prompt.useCount || 0} 次
                 </span>
               </div>
@@ -909,25 +1064,22 @@ function QuickAccessSection() {
 
       {/* 新人必备 */}
       {essential && essential.length > 0 && (
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Star className="h-4 w-4 text-purple-500" />
-            <h3 className="font-medium text-sm">新人必备</h3>
+        <Card className="p-2.5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Star className="h-3.5 w-3.5 text-purple-500" />
+            <h3 className="font-medium text-xs">新人必备</h3>
           </div>
-          <div className="space-y-2">
-            {essential.map((prompt: any) => (
+          <div className="space-y-1">
+            {essential.slice(0, 3).map((prompt: any) => (
               <div
                 key={prompt.id}
                 onClick={() => setLocation(`/prompts/${prompt.id}`)}
-                className="flex items-center justify-between p-2 rounded hover:bg-muted cursor-pointer transition-colors"
+                className="flex items-center justify-between p-1.5 rounded hover:bg-muted cursor-pointer transition-colors"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{prompt.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {prompt.description || prompt.content}
-                  </p>
+                  <p className="text-xs font-medium truncate">{prompt.title}</p>
                 </div>
-                <span className="text-xs text-muted-foreground ml-2 whitespace-nowrap">
+                <span className="text-[10px] text-muted-foreground ml-2 whitespace-nowrap">
                   {prompt.useCount || 0} 次
                 </span>
               </div>

@@ -84,12 +84,15 @@ export const prompts = mysqlTable("prompts", {
   structureScore: int("structureScore").default(0),
   clarityScore: int("clarityScore").default(0),
   scenarioScore: int("scenarioScore").default(0),
+  scoreReason: text("scoreReason"), // AI评分的详细理由
   useCount: int("useCount").default(0), // 使用次数
   lastUsedAt: timestamp("lastUsedAt"), // 最近使用时间
   isFavorite: boolean("isFavorite").default(false).notNull(), // 是否收藏
   customMark: varchar("customMark", { length: 50 }), // 自定义标记: 常用/待优化/已验证
   isTemplate: boolean("isTemplate").default(false).notNull(), // 是否为官方模板
   templateCategory: varchar("templateCategory", { length: 100 }), // 模板分类
+  marketScore: int("marketScore").default(0), // 市场准入分数
+  isMarketEligible: boolean("isMarketEligible").default(false).notNull(), // 是否符合市场准入条件
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -208,6 +211,7 @@ export const apiKeys = mysqlTable("apiKeys", {
   apiUrl: text("apiUrl"), // API base URL
   keyValue: text("keyValue").notNull(), // encrypted
   models: text("models"), // JSON array of available models
+  modelMetadata: text("modelMetadata"), // JSON object: { "model-name": { types: ["text", "vision"], apiType: "chat" | "images" } }
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

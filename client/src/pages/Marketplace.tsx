@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo, useEffect } from "react";
 import { Search, Star, Download, MessageSquare, TrendingUp, FolderTree, ChevronRight } from "lucide-react";
-import { useLocation } from "wouter";
+import { useSearch } from "wouter";
 import { toast } from "sonner";
 import {
   Select,
@@ -25,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
 export default function Marketplace() {
-  const [location] = useLocation();
+  const search = useSearch();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPrompt, setSelectedPrompt] = useState<any>(null);
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
@@ -42,7 +42,7 @@ export default function Marketplace() {
 
   // 处理URL参数中的scenario过滤
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.split('?')[1] || '');
+    const urlParams = new URLSearchParams(search ?? '');
     const scenarioParam = urlParams.get('scenario');
 
     if (scenarioParam && scenarios) {
@@ -77,7 +77,7 @@ export default function Marketplace() {
         }
       }
     }
-  }, [location, scenarios]);
+  }, [search, scenarios]);
   const { data: comments } = trpc.marketplace.getComments.useQuery(
     { promptId: selectedPrompt?.id },
     { enabled: !!selectedPrompt }

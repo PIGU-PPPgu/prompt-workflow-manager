@@ -18,11 +18,7 @@ export function CascadeScenarioSelector({ value, onChange, label = "应用场景
 
   // 从scenarioId反推三级选择
   useEffect(() => {
-    // 如果 allScenarios 还在加载，不做任何操作，保持当前状态
-    if (!allScenarios) return;
-
-    // 如果没有 value，清空所有级别
-    if (!value) {
+    if (!value || !allScenarios) {
       setLevel1Id(undefined);
       setLevel2Id(undefined);
       setLevel3Id(undefined);

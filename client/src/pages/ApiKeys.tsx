@@ -3,7 +3,7 @@ import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { Plus, Trash2, Power, Key, ShieldCheck, MoreHorizontal, FileText, Eye, Image as ImageIcon, Mic, Brain, Code, Search, Box, Edit2 } from "lucide-react";
+import { Plus, Trash2, Power, Key, ShieldCheck, MoreHorizontal, FileText, Eye, Image as ImageIcon, Mic, Brain, Code, Search, Box, Edit2, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -81,9 +81,26 @@ export default function ApiKeys() {
     },
   });
 
+  const testMutation = trpc.apiKeys.test.useMutation({
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    },
+    onError: (error) => {
+      toast.error("测试失败: " + error.message);
+    },
+  });
+
   const handleToggle = (id: number, current: boolean) => {
     updateMutation.mutate({ id, isActive: !current });
     toast.info(current ? "已禁用密钥" : "已激活密钥");
+  };
+
+  const handleTest = (id: number) => {
+    testMutation.mutate({ id });
   };
 
   const handleEdit = (key: any) => {
@@ -127,14 +144,27 @@ export default function ApiKeys() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {apiKeys.map((key) => {
               let models: string[] = [];
-              try { models = JSON.parse(key.models); } catch {}
-              
-              // Group models by type
+              if (key.models) {
+                try { models = JSON.parse(key.models); } catch {}
+              }
+
+              // Parse modelMetadata if available
+              let metadata: Record<string, { types: ModelType[]; apiType?: string }> = {};
+              if (key.modelMetadata) {
+                try { metadata = JSON.parse(key.modelMetadata); } catch {}
+              }
+
+              // Group models by type (support multiple types per model)
               const groupedModels: Partial<Record<ModelType, string[]>> = {};
               models.forEach(modelName => {
-                const type = inferModelType(modelName);
-                if (!groupedModels[type]) groupedModels[type] = [];
-                groupedModels[type]!.push(modelName);
+                // Prefer metadata types, fallback to inference
+                const types = metadata[modelName]?.types || [inferModelType(modelName)];
+                types.forEach(type => {
+                  if (!groupedModels[type]) groupedModels[type] = [];
+                  if (!groupedModels[type]!.includes(modelName)) {
+                    groupedModels[type]!.push(modelName);
+                  }
+                });
               });
 
               const hasModels = models.length > 0;
@@ -230,11 +260,26 @@ export default function ApiKeys() {
                       )}
                     </div>
 
-                    {/* Footer: Date & Encryption */}
+                    {/* Footer: Date & Encryption & Test */}
                     <div className="pt-4 border-t border-border/50 flex items-center justify-between text-[10px] text-muted-foreground uppercase tracking-wide">
-                      <div className="flex items-center gap-1.5 text-emerald-600/80 font-medium">
-                        <ShieldCheck className="w-3 h-3" />
-                        <span>Encrypted</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 text-emerald-600/80 font-medium">
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>Encrypted</span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-[10px] normal-case"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTest(key.id);
+                          }}
+                          disabled={!key.isActive || testMutation.isPending}
+                        >
+                          <Zap className="w-3 h-3 mr-1" />
+                          {testMutation.isPending ? "测试中" : "测试连接"}
+                        </Button>
                       </div>
                       <div className="font-mono">
                         {new Date(key.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}

@@ -83,6 +83,7 @@ export type InvokeParams = {
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
   response_format?: ResponseFormat;
+  temperature?: number;
 };
 
 export type ToolCall = {
@@ -296,12 +297,17 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
     responseFormat,
     response_format,
+    temperature,
   } = params;
 
   const payload: Record<string, unknown> = {
     model: "deepseek-chat",
     messages: messages.map(normalizeMessage),
   };
+
+  if (typeof temperature === "number") {
+    payload.temperature = temperature;
+  }
 
   if (tools && tools.length > 0) {
     payload.tools = tools;
@@ -356,14 +362,15 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 }
 
 // New function to test external models
-export async function testExternalModel(params: { 
+export async function testExternalModel(params: {
   apiKey: string;
   baseUrl?: string;
   model: string;
   provider: string;
+  apiType?: "chat" | "images";
 }): Promise<{ success: boolean; message: string; latency?: number }> {
-  const { apiKey, baseUrl, model, provider } = params;
-  
+  const { apiKey, baseUrl, model, provider, apiType = "chat" } = params;
+
   // Default URL handling
   let url = baseUrl;
   if (!url) {
@@ -372,11 +379,56 @@ export async function testExternalModel(params: {
     else if (provider === 'google') url = "https://generativelanguage.googleapis.com/v1beta";
     else url = "https://api.openai.com/v1"; // Fallback to OpenAI format
   }
-  
-  // Normalize URL (ensure no trailing slash, add /chat/completions if missing for OpenAI-like)
+
+  // Normalize URL (ensure no trailing slash)
   url = url.replace(/\/$/, "");
-  
-  // Handle different providers
+
+  // Handle image generation API
+  if (apiType === "images") {
+    const endpoint = `${url}/images/generations`;
+    const start = Date.now();
+    try {
+      // Try HEAD request first (faster)
+      let response = await fetch(endpoint, {
+        method: "HEAD",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+        },
+      });
+
+      // If HEAD not supported, try minimal POST
+      if (response.status === 405 || response.status === 404) {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt: "test",
+            model: model,
+            n: 1,
+            size: "256x256"
+          }),
+        });
+      }
+
+      const latency = Date.now() - start;
+      if (!response.ok) {
+        const err = await response.text();
+        try {
+          const jsonErr = JSON.parse(err);
+          if (jsonErr.error?.message) return { success: false, message: jsonErr.error.message };
+        } catch {}
+        return { success: false, message: `Error ${response.status}: ${err.substring(0, 100)}` };
+      }
+      return { success: true, message: "Connection successful", latency };
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+  }
+
+  // Handle chat API (original logic)
   if (provider === 'anthropic') {
     // Anthropic API
     const endpoint = `${url}/messages`;
@@ -395,7 +447,7 @@ export async function testExternalModel(params: {
           messages: [{ role: "user", content: "Hi" }],
         }),
       });
-      
+
       const latency = Date.now() - start;
       if (!response.ok) {
         const err = await response.text();
@@ -444,14 +496,14 @@ export async function testExternalModel(params: {
           max_tokens: 5
         }),
       });
-      
+
       const latency = Date.now() - start;
       if (!response.ok) {
         const err = await response.text();
         try {
             const jsonErr = JSON.parse(err);
             if (jsonErr.error?.message) return { success: false, message: jsonErr.error.message };
-        } catch {} 
+        } catch {}
         return { success: false, message: `Error ${response.status}: ${err.substring(0, 100)}` };
       }
       return { success: true, message: "Connection successful", latency };

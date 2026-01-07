@@ -17,6 +17,7 @@ import {
   UpdatePromptInput,
   ImportTemplateInput,
   CreateApiKeyInput,
+  UpdateApiKeyInput,
   UserMessage,
 } from "./schemas/enhanced";
 
@@ -157,15 +158,16 @@ export const appRouter = router({
         }
 
         // Step 3: Create local user record
+        const grantDays = invCode.grantDays ?? 0;
         await db.upsertUser({
           openId: authData.user.id,
           email: input.email,
           name: input.name || null,
           loginMethod: 'email',
           subscriptionTier: invCode.grantTier || 'free',
-          subscriptionStatus: invCode.grantDays > 0 ? 'active' : undefined,
-          subscriptionEndDate: invCode.grantDays > 0
-            ? new Date(Date.now() + invCode.grantDays * 24 * 60 * 60 * 1000)
+          subscriptionStatus: grantDays > 0 ? 'active' : undefined,
+          subscriptionEndDate: grantDays > 0
+            ? new Date(Date.now() + grantDays * 24 * 60 * 60 * 1000)
             : undefined,
         });
 
@@ -357,15 +359,23 @@ export const appRouter = router({
       .input(ImportTemplateInput)
       .mutation(async ({ input, ctx }) => {
         let categories;
-        
+
         if (input.fileType === 'csv') {
           categories = await db.parseCategoriesFromCSV(input.fileContent);
         } else {
           categories = await db.parseCategoriesFromJSON(input.fileContent);
         }
-        
+
         const result = await db.importCategoriesFromTemplate(ctx.user.id, categories);
         return { success: true, count: result.length, categories: result };
+      }),
+    initializePresets: publicProcedure
+      .input(z.object({ forceReset: z.boolean().optional() }).optional())
+      .mutation(async ({ input }) => {
+        // 动态导入 seedScenarios 函数
+        const { seedScenarios } = await import('./seedScenarios.js');
+        await seedScenarios(input?.forceReset ?? false);
+        return { success: true, message: input?.forceReset ? '预设场景分类已重置' : '预设场景分类初始化成功' };
       }),
   }),
 
@@ -383,10 +393,10 @@ export const appRouter = router({
         type: z.enum(["prompt", "workflow", "agent"]),
       }))
       .mutation(async ({ ctx, input }) => {
-        const id = await db.createCategory({
+        const id = Number(await db.createCategory({
           ...input,
           userId: ctx.user.id,
-        });
+        }));
 
         // 记录审计日志
         await db.createAuditLog({
@@ -1193,6 +1203,28 @@ export const appRouter = router({
       // Don't send actual key values to frontend
       return keys.map(k => ({ ...k, keyValue: "***" }));
     }),
+    reveal: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const apiKeyRecord = await db.getApiKeyById(input.id, ctx.user.id);
+        if (!apiKeyRecord) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'API Key 不存在' });
+        }
+
+        // 解密 API Key
+        const { decrypt } = await import('./_core/crypto');
+        let decryptedKey = apiKeyRecord.keyValue;
+        try {
+          const maybeDecrypted = decrypt(apiKeyRecord.keyValue);
+          if (typeof maybeDecrypted === "string") {
+            decryptedKey = maybeDecrypted;
+          }
+        } catch (e) {
+          // 解密失败，返回原始值
+        }
+
+        return { keyValue: decryptedKey };
+      }),
     create: protectedProcedure
       .input(CreateApiKeyInput)
       .mutation(async ({ ctx, input }) => {
@@ -1218,13 +1250,16 @@ export const appRouter = router({
         return { id };
       }),
     update: protectedProcedure
-      .input(z.object({
-        id: z.number(),
-        name: z.string().optional(),
-        isActive: z.boolean().optional(),
-      }))
+      .input(UpdateApiKeyInput)
       .mutation(async ({ ctx, input }) => {
-        const { id, ...data } = input;
+        const { id, keyValue, ...data } = input;
+
+        // 如果提供了新的 keyValue，需要加密
+        if (keyValue) {
+          const { encrypt } = await import('./_core/crypto');
+          data.keyValue = encrypt(keyValue);
+        }
+
         await db.updateApiKey(id, ctx.user.id, data);
 
         // 记录审计日志
@@ -1238,31 +1273,90 @@ export const appRouter = router({
         return { success: true };
       }),
     test: protectedProcedure
-      .input(z.object({
-        id: z.number(),
-        model: z.string(),
-      }))
+      .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        const apiKeyRecord = await db.getApiKeyById(input.id, ctx.user.id);
-        if (!apiKeyRecord) throw new Error("API Key not found");
+        const startTime = Date.now();
 
-        // Decrypt key
-        const { decrypt } = await import('./_core/crypto');
-        let decryptedKey = apiKeyRecord.keyValue;
         try {
-          decryptedKey = decrypt(apiKeyRecord.keyValue);
-        } catch (e) {
-          // If decryption fails, maybe it's not encrypted or legacy
-          console.error("Decryption failed, using raw value");
-        }
+          const apiKeyRecord = await db.getApiKeyById(input.id, ctx.user.id);
+          if (!apiKeyRecord) {
+            return { success: false, message: "API Key 不存在" };
+          }
+          if (!apiKeyRecord.keyValue) {
+            return { success: false, message: "API Key 值未设置" };
+          }
 
-        const { testExternalModel } = await import('./_core/llm');
-        return await testExternalModel({
-          apiKey: decryptedKey,
-          baseUrl: apiKeyRecord.apiUrl || undefined,
-          model: input.model,
-          provider: apiKeyRecord.provider,
-        });
+          // 解密 API Key
+          const { decrypt } = await import('./_core/crypto');
+          let decryptedKey: string = apiKeyRecord.keyValue;
+          try {
+            const maybeDecrypted = decrypt(apiKeyRecord.keyValue);
+            if (typeof maybeDecrypted === "string") {
+              decryptedKey = maybeDecrypted;
+            }
+          } catch (e) {
+            console.error("解密失败，使用原始值");
+          }
+
+          // 提取第一个模型和 apiType
+          let testModel: string | undefined;
+          let apiType: "chat" | "images" = "chat";
+
+          // 优先从 modelMetadata 中提取
+          if (apiKeyRecord.modelMetadata) {
+            try {
+              const metadata = JSON.parse(apiKeyRecord.modelMetadata);
+              const modelNames = Object.keys(metadata);
+              if (modelNames.length > 0) {
+                testModel = modelNames[0];
+                apiType = metadata[testModel]?.apiType || "chat";
+              }
+            } catch (e) {
+              console.error("解析 modelMetadata 失败");
+            }
+          }
+
+          // 回退到 models 数组
+          if (!testModel && apiKeyRecord.models) {
+            try {
+              const models = JSON.parse(apiKeyRecord.models);
+              if (Array.isArray(models) && models.length > 0) {
+                testModel = models[0];
+              }
+            } catch (e) {
+              console.error("解析 models 失败");
+            }
+          }
+
+          if (!testModel) {
+            return { success: false, message: "未配置任何模型" };
+          }
+
+          // 调用测试函数
+          const { testExternalModel } = await import('./_core/llm');
+          await testExternalModel({
+            apiKey: decryptedKey,
+            baseUrl: apiKeyRecord.apiUrl || undefined,
+            model: testModel,
+            provider: apiKeyRecord.provider,
+            apiType,
+          });
+
+          const latency = Date.now() - startTime;
+          return {
+            success: true,
+            message: `连接正常，延迟 ${latency}ms`,
+            latency
+          };
+        } catch (error: any) {
+          const latency = Date.now() - startTime;
+          const message = error?.message || "连接测试失败";
+          return {
+            success: false,
+            message,
+            latency
+          };
+        }
       }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -2127,10 +2221,37 @@ export const appRouter = router({
           const n = input.parameters?.n || 1;
           const imageUrls: string[] = [];
 
+          // 获取并解密用户的 API Key（如果提供）
+          let userApiKey: string | undefined;
+          let userApiUrl: string | undefined;
+          if (input.apiKeyId) {
+            const apiKeyRecord = await db.getApiKeyById(input.apiKeyId, ctx.user.id);
+            if (apiKeyRecord && apiKeyRecord.keyValue) {
+              const { decrypt } = await import('./_core/crypto');
+              try {
+                const decrypted = decrypt(apiKeyRecord.keyValue);
+                if (typeof decrypted === "string") {
+                  userApiKey = decrypted;
+                }
+              } catch (e) {
+                // 如果解密失败，可能是未加密的旧数据
+                console.error("API Key 解密失败，尝试使用原始值");
+                userApiKey = apiKeyRecord.keyValue;
+              }
+              userApiUrl = apiKeyRecord.apiUrl || undefined;
+            }
+          }
+
           // 生成多张图片
           for (let i = 0; i < n; i++) {
             const result = await generateImage({
               prompt: input.prompt,
+              model: input.model,                      // ✅ 传递模型
+              size: input.parameters?.size,            // ✅ 传递尺寸
+              quality: input.parameters?.quality,      // ✅ 传递质量
+              style: input.parameters?.style,          // ✅ 传递风格
+              apiKey: userApiKey,                      // ✅ 传递用户 API Key
+              apiUrl: userApiUrl,                      // ✅ 传递用户 API URL
             });
             if (result.url) {
               imageUrls.push(result.url);

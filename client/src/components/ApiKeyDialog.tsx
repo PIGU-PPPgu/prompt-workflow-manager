@@ -13,10 +13,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { trpc } from "@/lib/trpc";
 import { useState, useRef, useEffect } from "react";
+import * as React from "react";
 import { toast } from "sonner";
-import { Check, Sparkles, Download, Upload, FileJson, AlertCircle, Trash2, Plus, GripVertical, FileText, Eye, Image as ImageIcon, Mic, Brain, Code, Search } from "lucide-react";
+import { Check, Sparkles, Download, Upload, FileJson, AlertCircle, Trash2, Plus, GripVertical, FileText, Eye, EyeOff, Image as ImageIcon, Mic, Brain, Code, Search, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ApiKeyDialogProps {
@@ -110,6 +117,10 @@ export function ApiKeyDialog({ open, onOpenChange, initialData }: ApiKeyDialogPr
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [customModel, setCustomModel] = useState("");
   const [apiFormat, setApiFormat] = useState("openai");
+  const [modelMetadata, setModelMetadata] = useState<Record<string, { types: ModelType[]; apiType: "chat" | "images" }>>({});
+  const [editingModel, setEditingModel] = useState<string | null>(null);
+  const [showKey, setShowKey] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
 
   const [importedApis, setImportedApis] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
@@ -148,11 +159,18 @@ export function ApiKeyDialog({ open, onOpenChange, initialData }: ApiKeyDialogPr
         setName(initialData.name);
         setProvider(initialData.provider);
         setApiUrl(initialData.apiUrl || "");
-        setKeyValue(""); 
+        setKeyValue("");
         try {
           setSelectedModels(initialData.models ? JSON.parse(initialData.models) : []);
         } catch {
           setSelectedModels([]);
+        }
+        // Parse modelMetadata
+        try {
+          const metadata = initialData.modelMetadata ? JSON.parse(initialData.modelMetadata) : {};
+          setModelMetadata(metadata);
+        } catch {
+          setModelMetadata({});
         }
       } else {
         resetForm();
@@ -170,6 +188,10 @@ export function ApiKeyDialog({ open, onOpenChange, initialData }: ApiKeyDialogPr
     setSelectedModels([]);
     setCustomModel("");
     setApiFormat("openai");
+    setModelMetadata({});
+    setEditingModel(null);
+    setShowKey(false);
+    setRevealedKey(null);
     setImportedApis([]);
   };
 
@@ -187,18 +209,21 @@ export function ApiKeyDialog({ open, onOpenChange, initialData }: ApiKeyDialogPr
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const modelsJson = selectedModels.length > 0 ? JSON.stringify(selectedModels) : undefined;
+    const metadataJson = Object.keys(modelMetadata).length > 0 ? JSON.stringify(modelMetadata) : undefined;
+
     if (initialData) {
-      if (!name.trim() || !provider.trim()) {
-        toast.error("名称和提供商不能为空");
+      if (!name.trim()) {
+        toast.error("名称不能为空");
         return;
       }
       updateMutation.mutate({
         id: initialData.id,
         name: name.trim(),
-        provider: provider.trim(),
         apiUrl: apiUrl.trim() || undefined,
-        keyValue: keyValue.trim() || undefined, 
-        models: selectedModels.length > 0 ? JSON.stringify(selectedModels) : undefined,
+        keyValue: keyValue.trim() || undefined,
+        models: modelsJson,
+        modelMetadata: metadataJson,
       });
     } else {
       if (!name.trim() || !provider.trim() || !keyValue.trim()) {
@@ -210,7 +235,8 @@ export function ApiKeyDialog({ open, onOpenChange, initialData }: ApiKeyDialogPr
         provider: provider.trim(),
         apiUrl: apiUrl.trim() || undefined,
         keyValue: keyValue.trim(),
-        models: selectedModels.length > 0 ? JSON.stringify(selectedModels) : undefined,
+        models: modelsJson,
+        modelMetadata: metadataJson,
       });
     }
   };
@@ -221,6 +247,18 @@ export function ApiKeyDialog({ open, onOpenChange, initialData }: ApiKeyDialogPr
     const model = customModel.trim();
     if (model && !selectedModels.includes(model)) {
       setSelectedModels(prev => [...prev, model]);
+
+      // Auto-generate default metadata based on model name
+      const inferredType = inferModelType(model);
+      const defaultApiType = inferredType === "image" ? "images" : "chat";
+      setModelMetadata(prev => ({
+        ...prev,
+        [model]: {
+          types: [inferredType],
+          apiType: defaultApiType,
+        }
+      }));
+
       setCustomModel("");
     }
   };
@@ -287,12 +325,54 @@ export function ApiKeyDialog({ open, onOpenChange, initialData }: ApiKeyDialogPr
 
               <div className="space-y-2">
                 <Label>API Key</Label>
-                <Input 
-                  type="password" 
-                  value={keyValue} 
-                  onChange={e => setKeyValue(e.target.value)} 
-                  placeholder={isEditing ? "留空则保持不变" : "sk-..."} 
-                />
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showKey ? "text" : "password"}
+                      value={keyValue}
+                      onChange={e => setKeyValue(e.target.value)}
+                      placeholder={isEditing ? "留空则保持不变" : "sk-..."}
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                      onClick={() => setShowKey(!showKey)}
+                    >
+                      {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {isEditing && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        if (revealedKey) {
+                          setKeyValue(revealedKey);
+                          setShowKey(true);
+                          toast.success("已填入当前密钥");
+                        } else {
+                          try {
+                            const result = await utils.client.apiKeys.reveal.query({ id: initialData!.id });
+                            setRevealedKey(result.keyValue);
+                            setKeyValue(result.keyValue);
+                            setShowKey(true);
+                            toast.success("已获取当前密钥");
+                          } catch (e: any) {
+                            toast.error("获取密钥失败: " + e.message);
+                          }
+                        }
+                      }}
+                    >
+                      查看当前密钥
+                    </Button>
+                  )}
+                </div>
+                {isEditing && (
+                  <p className="text-xs text-muted-foreground">留空则保持原密钥不变，或点击"查看当前密钥"查看并编辑</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -330,38 +410,142 @@ export function ApiKeyDialog({ open, onOpenChange, initialData }: ApiKeyDialogPr
                   ) : (
                     <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
                       {selectedModels.map(model => {
-                        const type = inferModelType(model);
-                        const conf = MODEL_CONFIG[type];
+                        const metadata = modelMetadata[model];
+                        const types = metadata?.types || [inferModelType(model)];
+                        const apiType = metadata?.apiType || (types.includes("image") ? "images" : "chat");
+
+                        // Display first type's config
+                        const primaryType = types[0];
+                        const conf = MODEL_CONFIG[primaryType];
                         const Icon = conf.icon;
-                        
+
                         return (
                           <div key={model} className="flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors group">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
                               {/* 拖拽手柄 (装饰性) */}
-                              <GripVertical className="h-4 w-4 text-muted-foreground/30 cursor-grab" />
-                              
+                              <GripVertical className="h-4 w-4 text-muted-foreground/30 cursor-grab shrink-0" />
+
                               {/* 类型图标 */}
-                              <div className={cn("p-1.5 rounded-md", conf.bg, conf.color)}>
+                              <div className={cn("p-1.5 rounded-md shrink-0", conf.bg, conf.color)}>
                                 <Icon className="h-4 w-4" />
                               </div>
-                              
-                              <span className="text-sm font-medium">{model}</span>
-                              
-                              {/* 类型标签 */}
-                              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border/50">
-                                {conf.label}
-                              </span>
+
+                              <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                <span className="text-sm font-medium truncate">{model}</span>
+
+                                {/* 类型标签(支持多个) */}
+                                <div className="flex flex-wrap gap-1">
+                                  {types.map(t => {
+                                    const c = MODEL_CONFIG[t];
+                                    return (
+                                      <span key={t} className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border/50">
+                                        {c.label}
+                                      </span>
+                                    );
+                                  })}
+                                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border/50">
+                                    {apiType === "images" ? "Images API" : "Chat API"}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                            
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                              onClick={() => setSelectedModels(prev => prev.filter(m => m !== model))}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              {/* 编辑类别按钮 */}
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                  >
+                                    <Settings className="h-4 w-4" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80">
+                                  <div className="space-y-4">
+                                    <div>
+                                      <h4 className="font-medium mb-2">模型类别（可多选）</h4>
+                                      <div className="space-y-2">
+                                        {(Object.keys(MODEL_CONFIG) as ModelType[]).map(type => {
+                                          const isChecked = types.includes(type);
+                                          return (
+                                            <div key={type} className="flex items-center gap-2">
+                                              <Checkbox
+                                                checked={isChecked}
+                                                onCheckedChange={(checked) => {
+                                                  setModelMetadata(prev => {
+                                                    const current = prev[model] || { types: [inferModelType(model)], apiType: "chat" };
+                                                    const newTypes = checked
+                                                      ? [...current.types, type]
+                                                      : current.types.filter(t => t !== type);
+                                                    return {
+                                                      ...prev,
+                                                      [model]: {
+                                                        ...current,
+                                                        types: newTypes.length > 0 ? newTypes : [inferModelType(model)]
+                                                      }
+                                                    };
+                                                  });
+                                                }}
+                                              />
+                                              <Label className="text-sm flex items-center gap-2 cursor-pointer">
+                                                {React.createElement(MODEL_CONFIG[type].icon, { className: "h-3 w-3" })}
+                                                {MODEL_CONFIG[type].label}
+                                              </Label>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <h4 className="font-medium mb-2">调用方式</h4>
+                                      <RadioGroup
+                                        value={apiType}
+                                        onValueChange={(value: "chat" | "images") => {
+                                          setModelMetadata(prev => ({
+                                            ...prev,
+                                            [model]: {
+                                              types: prev[model]?.types || [inferModelType(model)],
+                                              apiType: value
+                                            }
+                                          }));
+                                        }}
+                                      >
+                                        <div className="flex items-center space-x-2">
+                                          <RadioGroupItem value="chat" id={`${model}-chat`} />
+                                          <Label htmlFor={`${model}-chat`} className="text-sm">Chat API</Label>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <RadioGroupItem value="images" id={`${model}-images`} />
+                                          <Label htmlFor={`${model}-images`} className="text-sm">Images API</Label>
+                                        </div>
+                                      </RadioGroup>
+                                    </div>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+
+                              {/* 删除按钮 */}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                                onClick={() => {
+                                  setSelectedModels(prev => prev.filter(m => m !== model));
+                                  setModelMetadata(prev => {
+                                    const newMeta = { ...prev };
+                                    delete newMeta[model];
+                                    return newMeta;
+                                  });
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         );
                       })}

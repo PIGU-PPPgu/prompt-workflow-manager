@@ -1,6 +1,6 @@
 import { eq, and, or, desc, sql, isNull, gt } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
+import { createPool, type Pool } from "mysql2/promise";
 import {
   InsertUser, users,
   prompts, InsertPrompt,
@@ -27,16 +27,17 @@ import {
   invitationCodeUsage, InsertInvitationCodeUsage,
   siteSettings, InsertSiteSetting
 } from "../drizzle/schema";
+import * as schema from "../drizzle/schema";
 import { nanoid } from "nanoid";
 import { ENV } from './_core/env';
 
-let _db: ReturnType<typeof drizzle> | null = null;
+let _db: MySql2Database<typeof schema> | null = null;
 
-export async function getDb() {
+export async function getDb(): Promise<MySql2Database<typeof schema> | null> {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      const pool = mysql.createPool(process.env.DATABASE_URL);
-      _db = drizzle(pool);
+      const pool: Pool = createPool(process.env.DATABASE_URL);
+      _db = drizzle(pool, { schema, mode: 'default' });
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -613,58 +614,144 @@ async function analyzeImprovements(original: string, optimized: string) {
 export async function calculatePromptScore(promptId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const prompt = await getPromptById(promptId, userId);
   if (!prompt) throw new Error("Prompt not found");
-  
+
   const content = prompt.content;
-  
-  // 1. 结构完整性评分 (0-100)
-  let structureScore = 0;
-  if (content.includes("你是") || content.includes("你的角色")) structureScore += 25;
-  if (content.includes("请") || content.includes("任务")) structureScore += 25;
-  if (content.includes("格式") || content.includes("输出")) structureScore += 25;
-  if (content.includes("要求") || content.includes("注意") || content.includes("约束")) structureScore += 25;
-  
-  // 2. 清晰度评分 (0-100)
-  const sentences = content.split(/[。.!?]/);
-  const avgLength = sentences.reduce((sum, s) => sum + s.length, 0) / sentences.length;
-  let clarityScore = 100;
-  if (avgLength > 50) clarityScore -= 20; // 句子过长扣分
-  if (content.includes("等") || content.includes("之类")) clarityScore -= 10; // 模糊词汇扣分
-  
-  // 3. 场景适配度评分 (0-100)
-  let scenarioScore = 50; // 默认50分
-  if (prompt.scenarioId) {
-    scenarioScore = 80; // 有场景分类加分
-  }
-  if (prompt.tags) {
-    scenarioScore += 20; // 有标签加分
-  }
-  
-  // 综合评分
-  const totalScore = Math.round(
-    structureScore * 0.4 + 
-    clarityScore * 0.35 + 
-    scenarioScore * 0.25
-  );
-  
-  // 更新数据库
-  await db.update(prompts)
-    .set({
-      score: totalScore,
+
+  // 使用AI评分
+  const systemPrompt = `你是一个专业的提示词质量评估专家。你的任务是评估提示词的质量并给出详细评分。
+
+评估维度（每项0-100分）：
+1. **结构完整性**：是否包含角色定义、任务描述、输出格式、约束条件等完整结构
+2. **清晰度**：语言是否精确、无歧义、易于理解
+3. **场景适配度**：是否针对特定场景、有明确分类和标签
+
+请以JSON格式返回评分结果，格式如下：
+\`\`\`json
+{
+  "structureScore": 85,
+  "clarityScore": 90,
+  "scenarioScore": 70,
+  "structureReason": "包含明确的角色定义和任务描述，但缺少输出格式说明",
+  "clarityReason": "语言精确，逻辑清晰，无明显歧义",
+  "scenarioReason": "适用场景较通用，建议添加具体场景分类"
+}
+\`\`\`
+
+请直接返回JSON，不要添加其他文字说明。`;
+
+  try {
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `请评估以下提示词的质量:\n\n${content}` }
+      ],
+    });
+
+    const messageContent = response.choices[0]?.message?.content;
+    if (!messageContent || typeof messageContent !== 'string') {
+      throw new Error("AI返回结果为空");
+    }
+
+    // 提取JSON（可能被代码块包裹）
+    const jsonMatch = messageContent.match(/```json\s*([\s\S]*?)\s*```/) ||
+                     messageContent.match(/\{[\s\S]*\}/);
+
+    if (!jsonMatch) {
+      throw new Error("AI返回格式错误");
+    }
+
+    const jsonStr = jsonMatch[1] || jsonMatch[0];
+    const scoreData = JSON.parse(jsonStr);
+
+    const structureScore = Math.max(0, Math.min(100, scoreData.structureScore || 0));
+    const clarityScore = Math.max(0, Math.min(100, scoreData.clarityScore || 0));
+    const scenarioScore = Math.max(0, Math.min(100, scoreData.scenarioScore || 0));
+
+    // 综合评分
+    const totalScore = Math.round(
+      structureScore * 0.4 +
+      clarityScore * 0.35 +
+      scenarioScore * 0.25
+    );
+
+    // 组合详细理由
+    const scoreReason = JSON.stringify({
+      structureReason: scoreData.structureReason || "",
+      clarityReason: scoreData.clarityReason || "",
+      scenarioReason: scoreData.scenarioReason || "",
+    });
+
+    // 更新数据库
+    await db.update(prompts)
+      .set({
+        score: totalScore,
+        structureScore,
+        clarityScore,
+        scenarioScore,
+        scoreReason,
+      })
+      .where(eq(prompts.id, promptId));
+
+    return {
+      totalScore,
       structureScore,
       clarityScore,
       scenarioScore,
-    })
-    .where(eq(prompts.id, promptId));
-  
-  return {
-    totalScore,
-    structureScore,
-    clarityScore,
-    scenarioScore,
-  };
+      scoreReason,
+    };
+  } catch (error: any) {
+    console.error("AI评分失败，使用规则评分:", error);
+
+    // 降级：使用原有的规则评分
+    let structureScore = 0;
+    if (content.includes("你是") || content.includes("你的角色")) structureScore += 25;
+    if (content.includes("请") || content.includes("任务")) structureScore += 25;
+    if (content.includes("格式") || content.includes("输出")) structureScore += 25;
+    if (content.includes("要求") || content.includes("注意") || content.includes("约束")) structureScore += 25;
+
+    const sentences = content.split(/[。.!?]/);
+    const avgLength = sentences.reduce((sum, s) => sum + s.length, 0) / sentences.length;
+    let clarityScore = 100;
+    if (avgLength > 50) clarityScore -= 20;
+    if (content.includes("等") || content.includes("之类")) clarityScore -= 10;
+
+    let scenarioScore = 50;
+    if (prompt.scenarioId) scenarioScore = 80;
+    if (prompt.tags) scenarioScore += 20;
+
+    const totalScore = Math.round(
+      structureScore * 0.4 +
+      clarityScore * 0.35 +
+      scenarioScore * 0.25
+    );
+
+    const scoreReason = JSON.stringify({
+      structureReason: "使用规则评分（AI评分失败）",
+      clarityReason: "使用规则评分（AI评分失败）",
+      scenarioReason: "使用规则评分（AI评分失败）",
+    });
+
+    await db.update(prompts)
+      .set({
+        score: totalScore,
+        structureScore,
+        clarityScore,
+        scenarioScore,
+        scoreReason,
+      })
+      .where(eq(prompts.id, promptId));
+
+    return {
+      totalScore,
+      structureScore,
+      clarityScore,
+      scenarioScore,
+      scoreReason,
+    };
+  }
 }
 
 // ============ Marketplace Functions ============
@@ -672,12 +759,17 @@ export async function calculatePromptScore(promptId: number, userId: number) {
 export async function getPublicPrompts() {
   const db = await getDb();
   if (!db) return [];
-  
+
   const result = await db
     .select()
     .from(prompts)
-    .where(eq(prompts.isPublic, true));
-  
+    .where(
+      and(
+        eq(prompts.isPublic, true),
+        eq(prompts.isMarketEligible, true)
+      )
+    );
+
   return result;
 }
 
@@ -823,8 +915,12 @@ export async function recordPromptUse(promptId: number, userId: number): Promise
   if (!db) return;
 
   const prompt = await db.select().from(prompts).where(eq(prompts.id, promptId)).limit(1);
-  if (prompt.length === 0 || prompt[0].userId !== userId) {
-    throw new Error("Prompt not found or access denied");
+  if (prompt.length === 0) {
+    throw new Error("Prompt not found");
+  }
+  // 允许: 自己的 prompt OR 公开的 prompt
+  if (prompt[0].userId !== userId && !prompt[0].isPublic) {
+    throw new Error("Access denied");
   }
 
   await db.update(prompts)
@@ -833,7 +929,33 @@ export async function recordPromptUse(promptId: number, userId: number): Promise
       lastUsedAt: new Date(),
     })
     .where(eq(prompts.id, promptId));
+
+  // 重新计算市场准入分数
+  await calculateMarketScore(promptId);
 }
+
+export async function calculateMarketScore(promptId: number) {
+  const db = await getDb();
+  if (!db) return { marketScore: 0, isMarketEligible: false };
+
+  const result = await db.select().from(prompts).where(eq(prompts.id, promptId)).limit(1);
+  if (result.length === 0) return { marketScore: 0, isMarketEligible: false };
+
+  const prompt = result[0];
+  const useCount = prompt.useCount || 0;
+  const score = prompt.score || 0;
+
+  // 公式: marketScore = useCount * 0.3 + score * 0.7
+  const marketScore = Math.round(useCount * 0.3 + score * 0.7);
+  const isMarketEligible = marketScore >= 50;
+
+  await db.update(prompts)
+    .set({ marketScore, isMarketEligible })
+    .where(eq(prompts.id, promptId));
+
+  return { marketScore, isMarketEligible };
+}
+
 
 
 export async function analyzePromptAndSuggest(content: string) {
@@ -1659,8 +1781,9 @@ export async function suggestCategoryAndTags(content: string, title?: string, us
   const systemScenarios = allScenarios.filter(s => !s.isCustom);
   const level3Scenarios = systemScenarios.filter(s => s.level === 3);
   const teachingScenarios = level3Scenarios.filter(s => {
+    if (!s.parentId) return false;
     const root = scenarioMap.get(s.parentId);
-    return root && (root.parentId === 1); // 学科教学的子分类
+    return root && root.parentId === 1; // 学科教学的子分类
   });
 
   const systemPrompt = `你是一个专业的提示词分类助手。根据用户提供的提示词内容,分析并推荐最合适的应用场景分类和标签。
@@ -2245,20 +2368,22 @@ export async function getPromptMetaStats(userId: number) {
       count: Number(row.count || 0),
     }));
 
-  const [subjectRows] = await db.execute(
+  const [subjectRows] = (await db.execute<Array<{ subject: string | null; count: number }>>(
     sql`SELECT subject, COUNT(*) as count FROM ${prompts} WHERE ${prompts.userId} = ${userId} GROUP BY subject`
-  );
-  const [sceneRows] = await db.execute(
+  )) as unknown as [Array<{ subject: string | null; count: number }>];
+
+  const [sceneRows] = (await db.execute<Array<{ teachingScene: string | null; count: number }>>(
     sql`SELECT teachingScene, COUNT(*) as count FROM ${prompts} WHERE ${prompts.userId} = ${userId} GROUP BY teachingScene`
-  );
-  const [gradeRows] = await db.execute(
+  )) as unknown as [Array<{ teachingScene: string | null; count: number }>];
+
+  const [gradeRows] = (await db.execute<Array<{ gradeLevel: string | null; count: number }>>(
     sql`SELECT gradeLevel, COUNT(*) as count FROM ${prompts} WHERE ${prompts.userId} = ${userId} GROUP BY gradeLevel`
-  );
+  )) as unknown as [Array<{ gradeLevel: string | null; count: number }>];
 
   return {
-    subjects: normalize(subjectRows as any[], 'subject'),
-    scenes: normalize(sceneRows as any[], 'teachingScene'),
-    grades: normalize(gradeRows as any[], 'gradeLevel'),
+    subjects: normalize(subjectRows, 'subject'),
+    scenes: normalize(sceneRows, 'teachingScene'),
+    grades: normalize(gradeRows, 'gradeLevel'),
   };
 }
 
@@ -2833,7 +2958,7 @@ export async function hasUserUsedCoupon(userId: number, couponId: number) {
 // ============ Audit Log Functions ============
 
 export type AuditAction = 'create' | 'update' | 'delete' | 'execute' | 'login' | 'logout' | 'export' | 'import' | 'share' | 'optimize';
-export type AuditResourceType = 'prompt' | 'workflow' | 'agent' | 'category' | 'scenario' | 'apiKey' | 'subscription' | 'coupon' | 'user' | 'share' | 'image';
+export type AuditResourceType = 'prompt' | 'workflow' | 'agent' | 'category' | 'scenario' | 'apiKey' | 'subscription' | 'coupon' | 'user' | 'share' | 'image' | 'invitationCode' | 'setting';
 
 export async function createAuditLog(data: {
   userId: number;

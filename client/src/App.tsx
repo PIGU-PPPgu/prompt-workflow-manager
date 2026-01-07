@@ -32,12 +32,14 @@ import AdminAudit from "./pages/AdminAudit";
 import AdminSettings from "./pages/AdminSettings";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
+import Landing from "./pages/Landing";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
       <Switch>
       <Route path={"/optimizer"} component={PromptOptimizer} />
+      <Route path={"/landing"} component={Landing} />
       <Route path={"/image-generation"} component={ImageGeneration} />
       <Route path={"/home"} component={Home} />
       <Route path={"/"} component={Home} />

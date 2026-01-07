@@ -691,8 +691,27 @@ export default function PromptOptimizer() {
              <div className="space-y-2">
                 {historyList?.map(h => (
                   <Card key={h.id} className="p-2 cursor-pointer hover:bg-accent" onClick={() => {
-                    // 恢复逻辑
-                    // ...
+                    try {
+                      // 恢复对话历史
+                      const conversationData = JSON.parse(h.conversationData);
+                      setMessages(conversationData);
+                      setCurrentHistoryId(h.id);
+
+                      // 恢复设置
+                      if (h.settings) {
+                        const settings = JSON.parse(h.settings);
+                        if (settings.intensity) setIntensity(settings.intensity);
+                        if (settings.framework) setFramework(settings.framework);
+                        if (typeof settings.compareMode === 'boolean') setCompareMode(settings.compareMode);
+                        if (settings.models && Array.isArray(settings.models)) setSelectedActualModels(settings.models);
+                      }
+
+                      setIsSettingsOpen(false);
+                      toast.success("已恢复历史记录");
+                    } catch (e) {
+                      console.error("恢复历史记录失败:", e);
+                      toast.error("恢复历史记录失败");
+                    }
                   }}>
                     <div className="text-xs font-medium truncate">{h.title}</div>
                     <div className="text-[10px] text-muted-foreground">{new Date(h.lastMessageAt).toLocaleString()}</div>

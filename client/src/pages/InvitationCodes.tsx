@@ -243,7 +243,9 @@ export default function InvitationCodes() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {codes.map((code) => (
+              {codes.map((code) => {
+                const grantDays = code.grantDays ?? 0;
+                return (
                 <TableRow key={code.id}>
                   <TableCell className="font-mono font-semibold">
                     <div className="flex items-center gap-2">
@@ -266,9 +268,9 @@ export default function InvitationCodes() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{code.grantTier}</Badge>
-                    {code.grantDays > 0 && (
+                    {grantDays > 0 && (
                       <span className="text-xs text-neutral-500 ml-1">
-                        +{code.grantDays}天
+                        +{grantDays}天
                       </span>
                     )}
                   </TableCell>
@@ -312,7 +314,7 @@ export default function InvitationCodes() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+              )})}
             </TableBody>
           </Table>
         </div>

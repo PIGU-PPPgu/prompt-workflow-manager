@@ -23,7 +23,7 @@ export default function PromptDetail() {
   const promptId = parseInt(params.id || "0");
   
   const { data: prompt, isLoading } = trpc.prompts.getById.useQuery({ id: promptId });
-  const { data: scenarios } = trpc.scenarios.list.useQuery();
+  const { data: scenarios, isLoading: scenariosLoading } = trpc.scenarios.list.useQuery();
   const [aiSuggestions, setAiSuggestions] = useState<any>(null);
   const [showVersions, setShowVersions] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
@@ -37,6 +37,7 @@ export default function PromptDetail() {
   const [hitExpectation, setHitExpectation] = useState(true);
   const [usable, setUsable] = useState(true);
   const [feedbackComment, setFeedbackComment] = useState("");
+  const [scoreDetailOpen, setScoreDetailOpen] = useState(false);
   
   const { data: versions } = trpc.prompts.versions.useQuery(
     { promptId },
@@ -315,15 +316,21 @@ export default function PromptDetail() {
             <div>
               <p className="text-sm text-muted-foreground mb-1">应用场景</p>
               <p className="font-medium">
-                {prompt.scenarioId ? getScenarioPath(prompt.scenarioId) : "未分类"}
+                {scenariosLoading
+                  ? "加载中..."
+                  : (prompt.scenarioId ? getScenarioPath(prompt.scenarioId) : "未分类")}
               </p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground mb-1">综合评分</p>
-              <div className="flex items-center gap-2">
+              <button
+                onClick={() => setScoreDetailOpen(true)}
+                className="flex items-center gap-2 hover:text-primary transition-colors cursor-pointer"
+                title="点击查看评分详情"
+              >
                 <TrendingUp className="h-4 w-4" />
                 <span className="font-medium">{prompt.score || 0}/100</span>
-              </div>
+              </button>
             </div>
             <div>
               <p className="text-sm text-muted-foreground mb-1">使用次数</p>
@@ -711,6 +718,80 @@ export default function PromptDetail() {
               {feedbackMutation.isPending ? "提交中..." : "提交"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 评分详情Dialog */}
+      <Dialog open={scoreDetailOpen} onOpenChange={setScoreDetailOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>评分详情</DialogTitle>
+            <DialogDescription>
+              {prompt?.title}
+            </DialogDescription>
+          </DialogHeader>
+          {prompt && (
+            <div className="space-y-4">
+              <div className="text-center py-4 border-b">
+                <div className="text-4xl font-bold text-primary">
+                  {prompt.score || 0}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">综合评分</div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-semibold text-blue-600">
+                    {prompt.structureScore || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">结构完整性</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-semibold text-green-600">
+                    {prompt.clarityScore || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">清晰度</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-semibold text-purple-600">
+                    {prompt.scenarioScore || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">场景适配度</div>
+                </div>
+              </div>
+
+              {prompt.scoreReason && (() => {
+                try {
+                  const reasons = JSON.parse(prompt.scoreReason);
+                  return (
+                    <div className="space-y-3">
+                      <div className="text-sm font-medium border-b pb-2">详细评价</div>
+                      {reasons.structureReason && (
+                        <div className="text-sm">
+                          <div className="font-medium text-blue-600 mb-1">结构完整性</div>
+                          <div className="text-muted-foreground">{reasons.structureReason}</div>
+                        </div>
+                      )}
+                      {reasons.clarityReason && (
+                        <div className="text-sm">
+                          <div className="font-medium text-green-600 mb-1">清晰度</div>
+                          <div className="text-muted-foreground">{reasons.clarityReason}</div>
+                        </div>
+                      )}
+                      {reasons.scenarioReason && (
+                        <div className="text-sm">
+                          <div className="font-medium text-purple-600 mb-1">场景适配度</div>
+                          <div className="text-muted-foreground">{reasons.scenarioReason}</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                } catch {
+                  return null;
+                }
+              })()}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </DashboardLayout>
