@@ -64,6 +64,11 @@ services:
       # Branding
       VITE_APP_TITLE: ${VITE_APP_TITLE:-TeachPT}
       APP_LOGO: ${APP_LOGO:-/teachpt-logo.png}
+      # Forge Proxy (内置AI服务)
+      BUILT_IN_FORGE_API_URL: ${BUILT_IN_FORGE_API_URL:-}
+      BUILT_IN_FORGE_API_KEY: ${BUILT_IN_FORGE_API_KEY:-}
+      VITE_FRONTEND_FORGE_API_URL: ${VITE_FRONTEND_FORGE_API_URL:-}
+      VITE_FRONTEND_FORGE_API_KEY: ${VITE_FRONTEND_FORGE_API_KEY:-}
     depends_on:
       mysql:
         condition: service_healthy
